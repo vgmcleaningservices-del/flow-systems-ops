@@ -3,22 +3,36 @@ import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 
 type CrewStatus = "waiting" | "active" | "bottleneck" | "auto";
+type Stage = "scouting" | "sprint" | "exit-ready";
+
 interface Crew {
   id: string; name: string; rank: string; role: string;
   github_username: string | null; status: CrewStatus; task: string; note: string;
+  current_venture_id: string | null;
 }
-interface PipelineApp {
-  id: string; name: string; stage: "scouting" | "sprint" | "exit-ready";
-  price: string; feature: string; repo_done: boolean; domein_done: boolean; stripe_done: boolean;
+interface Venture {
+  id: string; name: string; stage: Stage; price: string; feature: string;
+  repo_done: boolean; domein_done: boolean; stripe_done: boolean;
+  github_repo: string | null; pitched_by: string | null;
+  mrr: number; mrr_prev: number; sprint_deadline: string | null; sprint_label: string;
 }
-interface CommitRow { id: number; repo: string; sha: string; message: string; author: string; pass_to: string | null; ts: string; }
-interface Directive { id: number; author: string; type: "directive" | "veto"; text: string; ts: string; }
-interface Telemetry { id: number; mrr: number; mrr_prev: number; sprint_deadline: string | null; sprint_label: string; }
+interface CommitRow { id: number; repo: string; venture_id: string | null; crew_id: string | null; sha: string; message: string; author: string; pass_to: string | null; ts: string; }
+interface Directive { id: number; venture_id: string | null; author: string; type: "directive" | "veto"; text: string; ts: string; }
+interface CrewEvent { id: number; crew_id: string; venture_id: string | null; from_status: string | null; to_status: string; source: string; ts: string; }
+interface Metric { id: number; crew_id: string; venture_id: string | null; label: string; value: number; period: string; note: string | null; created_at: string; }
+interface Payout { id: number; crew_id: string; venture_id: string | null; amount: number; note: string | null; paid_at: string; recorded_by: string; }
 
 const STATUS_LABEL: Record<CrewStatus, string> = { waiting: "Wachtend", active: "Geïsoleerd · Actief", bottleneck: "Active Bottleneck", auto: "Geautomatiseerd" };
 const STATUS_TAG: Record<CrewStatus, string> = { waiting: "t-waiting", active: "t-active", bottleneck: "t-bottleneck", auto: "t-auto" };
-const STAGE_LABEL: Record<string, string> = { scouting: "Concept / Scouting", sprint: "Actieve Sprint (72u)", "exit-ready": "Exit Ready" };
+const STAGE_LABEL: Record<Stage, string> = { scouting: "Concept / Scouting", sprint: "Actieve Sprint (72u)", "exit-ready": "Exit Ready" };
 const PEOPLE = ["Matthias", "Laurens", "Runar", "Seba", "Zende"];
+const METRIC_LABELS: Record<string, string> = {
+  outreach_contacted: "Outreach — contacted",
+  outreach_replies: "Outreach — replies",
+  outreach_meetings: "Outreach — meetings",
+  ideas_pitched: "Ideeën gepitcht",
+  other: "Overig",
+};
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
 function fmtEUR(n: number) { return "€" + Math.round(n).toLocaleString("nl-BE"); }
@@ -32,23 +46,34 @@ function relTime(iso: string | null) {
   if (h < 24) return h + " u geleden";
   return Math.floor(h / 24) + " dagen geleden";
 }
+function isoWeek(d: Date) {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${pad(week)}`;
+}
 
 export default function Dashboard(props: {
-  initialCrew: Crew[]; initialPipeline: PipelineApp[]; initialCommits: CommitRow[];
-  initialDirectives: Directive[]; initialTelemetry: Telemetry | null;
+  initialCrew: Crew[]; initialVentures: Venture[]; initialCommits: CommitRow[];
+  initialDirectives: Directive[]; initialCrewEvents: CrewEvent[]; initialMetrics: Metric[]; initialPayouts: Payout[];
 }) {
   const [crew, setCrew] = useState(props.initialCrew);
-  const [pipeline, setPipeline] = useState(props.initialPipeline);
+  const [ventures, setVentures] = useState(props.initialVentures);
   const [commits, setCommits] = useState(props.initialCommits);
   const [directives, setDirectives] = useState(props.initialDirectives);
-  const [telemetry, setTelemetry] = useState<Telemetry | null>(props.initialTelemetry);
-  const [me, setMe] = useState<string>("");
+  const [crewEvents, setCrewEvents] = useState(props.initialCrewEvents);
+  const [metrics, setMetrics] = useState(props.initialMetrics);
+  const [payouts, setPayouts] = useState(props.initialPayouts);
+  const [me, setMe] = useState("");
   const [now, setNow] = useState(Date.now());
+  const [selectedVentureId, setSelectedVentureId] = useState<string | null>(null);
 
   const [editCrewId, setEditCrewId] = useState<string | null>(null);
-  const [editMrr, setEditMrr] = useState(false);
-  const [openAppId, setOpenAppId] = useState<string | null>(null);
-  const [editAppId, setEditAppId] = useState<string | null>(null);
+  const [editMrrVentureId, setEditMrrVentureId] = useState<string | null>(null);
+  const [openVentureId, setOpenVentureId] = useState<string | null>(null);
+  const [editVentureId, setEditVentureId] = useState<string | null>(null);
   const [directiveText, setDirectiveText] = useState("");
 
   useEffect(() => {
@@ -60,18 +85,22 @@ export default function Dashboard(props: {
   useEffect(() => {
     const refetch = {
       crew: () => supabaseBrowser.from("crew").select("*").order("rank").then(({ data }) => data && setCrew(data as Crew[])),
-      pipeline: () => supabaseBrowser.from("pipeline").select("*").then(({ data }) => data && setPipeline(data as PipelineApp[])),
-      commits: () => supabaseBrowser.from("commits").select("*").order("ts", { ascending: false }).limit(6).then(({ data }) => data && setCommits(data as CommitRow[])),
+      ventures: () => supabaseBrowser.from("ventures").select("*").then(({ data }) => data && setVentures(data as Venture[])),
+      commits: () => supabaseBrowser.from("commits").select("*").order("ts", { ascending: false }).limit(200).then(({ data }) => data && setCommits(data as CommitRow[])),
       directives: () => supabaseBrowser.from("directives").select("*").order("ts", { ascending: false }).limit(12).then(({ data }) => data && setDirectives(data as Directive[])),
-      telemetry: () => supabaseBrowser.from("telemetry").select("*").eq("id", 1).limit(1).then(({ data }) => data?.[0] && setTelemetry(data[0] as Telemetry)),
+      crew_events: () => supabaseBrowser.from("crew_events").select("*").order("ts", { ascending: false }).limit(200).then(({ data }) => data && setCrewEvents(data as CrewEvent[])),
+      metrics: () => supabaseBrowser.from("metrics").select("*").order("created_at", { ascending: false }).limit(100).then(({ data }) => data && setMetrics(data as Metric[])),
+      payouts: () => supabaseBrowser.from("payouts").select("*").order("paid_at", { ascending: false }).limit(50).then(({ data }) => data && setPayouts(data as Payout[])),
     };
     const channel = supabaseBrowser
       .channel("flowsys-dashboard")
       .on("postgres_changes", { event: "*", schema: "public", table: "crew" }, refetch.crew)
-      .on("postgres_changes", { event: "*", schema: "public", table: "pipeline" }, refetch.pipeline)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ventures" }, refetch.ventures)
       .on("postgres_changes", { event: "*", schema: "public", table: "commits" }, refetch.commits)
       .on("postgres_changes", { event: "*", schema: "public", table: "directives" }, refetch.directives)
-      .on("postgres_changes", { event: "*", schema: "public", table: "telemetry" }, refetch.telemetry)
+      .on("postgres_changes", { event: "*", schema: "public", table: "crew_events" }, refetch.crew_events)
+      .on("postgres_changes", { event: "*", schema: "public", table: "metrics" }, refetch.metrics)
+      .on("postgres_changes", { event: "*", schema: "public", table: "payouts" }, refetch.payouts)
       .subscribe();
     return () => { supabaseBrowser.removeChannel(channel); };
   }, []);
@@ -87,57 +116,67 @@ export default function Dashboard(props: {
   async function post(url: string, body: unknown) {
     const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) window.alert("Opslaan mislukt — probeer opnieuw.");
+    return res.ok;
+  }
+  async function logout() {
+    await fetch("/api/logout", { method: "POST" });
+    window.location.href = "/login";
   }
 
+  const ventureName = (id: string | null) => (id ? ventures.find((v) => v.id === id)?.name ?? id : null);
   const owner = crew.find((c) => c.status === "bottleneck");
   const lastActivityIso = [directives[0]?.ts, commits[0]?.ts].filter(Boolean).sort().reverse()[0] || null;
 
-  const mrr = telemetry?.mrr ?? 0;
-  const mrrPrev = telemetry?.mrr_prev ?? 0;
+  const selectedVenture = selectedVentureId ? ventures.find((v) => v.id === selectedVentureId) ?? null : null;
+  const totalMrr = ventures.reduce((s, v) => s + v.mrr, 0);
+  const totalMrrPrev = ventures.reduce((s, v) => s + v.mrr_prev, 0);
+  const mrr = selectedVenture ? selectedVenture.mrr : totalMrr;
+  const mrrPrev = selectedVenture ? selectedVenture.mrr_prev : totalMrrPrev;
   const deltaPct = mrrPrev ? ((mrr - mrrPrev) / mrrPrev) * 100 : 0;
   const exit = Math.floor(mrr * 4.5);
 
+  const clockVenture = selectedVenture ?? [...ventures].filter((v) => v.sprint_deadline).sort((a, b) => new Date(a.sprint_deadline!).getTime() - new Date(b.sprint_deadline!).getTime())[0] ?? null;
   let clockText = "--:--:--", clockFoot = "geen actieve sprint", urgent = false;
-  if (telemetry?.sprint_deadline) {
-    const remaining = new Date(telemetry.sprint_deadline).getTime() - now;
-    if (remaining <= 0) { clockText = "00:00:00"; clockFoot = "sprint venster verlopen"; urgent = true; }
+  if (clockVenture?.sprint_deadline) {
+    const remaining = new Date(clockVenture.sprint_deadline).getTime() - now;
+    if (remaining <= 0) { clockText = "00:00:00"; clockFoot = `sprint venster verlopen — ${clockVenture.name}`; urgent = true; }
     else {
       const h = Math.floor(remaining / 3600000), m = Math.floor((remaining % 3600000) / 60000), s = Math.floor((remaining % 60000) / 1000);
       clockText = `${pad(h)}:${pad(m)}:${pad(s)}`;
-      clockFoot = `resterend — ${telemetry.sprint_label}`;
+      clockFoot = `resterend — ${clockVenture.name}`;
       urgent = h < 24;
     }
   }
 
-  async function saveCrew(c: Crew, status: CrewStatus, task: string, note: string) {
+  const visibleCommits = (selectedVentureId ? commits.filter((c) => c.venture_id === selectedVentureId) : commits).slice(0, 6);
+
+  async function saveCrew(c: Crew, status: CrewStatus, task: string, note: string, ventureId: string | null) {
     if (needsIdentity()) return;
-    await post("/api/crew", { id: c.id, status, task, note });
+    await post("/api/crew", { id: c.id, status, task, note, current_venture_id: ventureId });
     setEditCrewId(null);
   }
-  async function saveMrr(val: number) {
+  async function saveMrr(ventureId: string, val: number) {
     if (needsIdentity()) return;
-    await post("/api/telemetry", { mrr: val });
-    setEditMrr(false);
+    await post("/api/venture", { id: ventureId, mrr: val });
+    setEditMrrVentureId(null);
   }
   async function resetSprint() {
     if (needsIdentity()) return;
-    await post("/api/telemetry", { resetSprintHours: 72, sprintLabel: telemetry?.sprint_label || "Sprint" });
+    const v = clockVenture;
+    if (!v) { window.alert("Selecteer eerst een venture."); return; }
+    await post("/api/venture", { id: v.id, resetSprintHours: 72, sprintLabel: v.sprint_label || v.name });
   }
-  async function saveApp(p: PipelineApp, patch: Partial<PipelineApp>) {
+  async function saveVenture(v: Venture, patch: Partial<Venture>) {
     if (needsIdentity()) return;
-    await post("/api/pipeline", { id: p.id, ...patch });
-    setEditAppId(null);
+    await post("/api/venture", { id: v.id, ...patch });
+    setEditVentureId(null);
   }
   async function deploy() {
     if (needsIdentity()) return;
     const text = directiveText.trim();
     if (!text) return;
-    await post("/api/directive", { author: me, text });
+    await post("/api/directive", { author: me, text, venture_id: selectedVentureId });
     setDirectiveText("");
-  }
-  async function logout() {
-    await fetch("/api/logout", { method: "POST" });
-    window.location.href = "/login";
   }
 
   return (
@@ -157,23 +196,48 @@ export default function Dashboard(props: {
       </div>
       <p className="section-sub">Laatste activiteit: <b>{relTime(lastActivityIso)}</b></p>
 
+      {/* 00 OVERVIEW */}
+      <div className="section-head"><span className="section-num">00</span><span className="section-title">Alles-oké? — Venture Overzicht</span><span className="section-line" /></div>
+      <p className="section-sub">Klik een venture om de rest van de pagina daarop te focussen{selectedVenture ? " — klik nogmaals om te wissen" : ""}</p>
+      <div className="venture-strip">
+        {ventures.map((v) => {
+          const workers = crew.filter((c) => c.current_venture_id === v.id);
+          const hasBottleneck = workers.some((c) => c.status === "bottleneck");
+          const deadlinePassed = !!(v.sprint_deadline && new Date(v.sprint_deadline).getTime() < now);
+          let cls = "", label = "Scouting";
+          if (hasBottleneck || deadlinePassed) { cls = "status-bad"; label = deadlinePassed ? "Deadline verlopen" : "Bottleneck"; }
+          else if (v.stage === "exit-ready") { cls = "status-good"; label = "Exit Ready"; }
+          else if (v.stage === "sprint" && workers.length === 0) { cls = "status-warn"; label = "Stil — niemand actief"; }
+          else if (v.stage === "sprint") { cls = "status-good"; label = "Loopt"; }
+          return (
+            <button key={v.id} className={`venture-chip ${cls} ${selectedVentureId === v.id ? "selected" : ""}`} onClick={() => setSelectedVentureId(selectedVentureId === v.id ? null : v.id)}>
+              <div className="vc-name">{v.name}</div>
+              <div className="vc-stage">{STAGE_LABEL[v.stage]}</div>
+              {v.mrr > 0 && <div className="vc-mrr">{fmtEUR(v.mrr)}</div>}
+              <div className="vc-status-label">{label}</div>
+              <div className="vc-who">{workers.length ? workers.map((w) => w.name).join(", ") : "niemand actief"}</div>
+            </button>
+          );
+        })}
+      </div>
+
       {/* TELEMETRY */}
-      <div className="section-head"><span className="section-num">01</span><span className="section-title">Telemetrie</span><span className="section-line" /></div>
-      <p className="section-sub">M&amp;A-waardering, live berekend uit holding-MRR</p>
+      <div className="section-head"><span className="section-num">01</span><span className="section-title">Telemetrie{selectedVenture ? ` — ${selectedVenture.name}` : ""}</span><span className="section-line" /></div>
+      <p className="section-sub">{selectedVenture ? "MRR van deze venture" : "Holding-MRR — som van alle dochterbedrijven"}</p>
       <div className="telemetry">
         <div className="tile">
           <div className="tile-label">
-            <span>Holding MRR</span>
-            <button className="icon-btn" onClick={() => setEditMrr(true)} aria-label="Bewerk MRR">✎</button>
+            <span>{selectedVenture ? "Venture MRR" : "Holding MRR"}</span>
+            {selectedVenture && <button className="icon-btn" onClick={() => setEditMrrVentureId(selectedVenture.id)} aria-label="Bewerk MRR">✎</button>}
           </div>
-          {editMrr ? (
-            <MrrForm initial={mrr} onCancel={() => setEditMrr(false)} onSave={saveMrr} />
+          {editMrrVentureId && selectedVenture ? (
+            <MrrForm initial={selectedVenture.mrr} onCancel={() => setEditMrrVentureId(null)} onSave={(v) => saveMrr(selectedVenture.id, v)} />
           ) : (
             <div className="tile-value">{fmtEUR(mrr)}
-              <span className={"tile-delta " + (deltaPct >= 0 ? "up" : "down")}>{deltaPct >= 0 ? "▲" : "▼"} {Math.abs(deltaPct).toFixed(1)}%</span>
+              {mrrPrev > 0 && <span className={"tile-delta " + (deltaPct >= 0 ? "up" : "down")}>{deltaPct >= 0 ? "▲" : "▼"} {Math.abs(deltaPct).toFixed(1)}%</span>}
             </div>
           )}
-          <div className="tile-foot">Gecombineerde recurring revenue, alle dochterbedrijven</div>
+          <div className="tile-foot">{selectedVenture ? "Klik ✎ om bij te werken" : `Som van ${ventures.length} ventures`}</div>
         </div>
         <div className="tile">
           <div className="tile-label"><span>Projected Exit Waardering</span></div>
@@ -193,7 +257,7 @@ export default function Dashboard(props: {
           <div className="section-head"><span className="section-num">02</span><span className="section-title">Estafette — Squad Status</span><span className="section-line" /></div>
           <p className="section-sub">Aangedreven door echte Git-commits met <code>[PASS:NAAM]</code></p>
           {owner ? (
-            <div className="owner-bar">⚠ Huidige code-eigenaar: <strong>{owner.name}</strong>{owner.note ? <> — <code>{owner.note}</code></> : null}</div>
+            <div className="owner-bar">⚠ Huidige code-eigenaar: <strong>{owner.name}</strong>{owner.note ? <> — <code>{owner.note}</code></> : null}{owner.current_venture_id ? <> op <strong>{ventureName(owner.current_venture_id)}</strong></> : null}</div>
           ) : (
             <div className="owner-bar none">✓ Geen actieve bottleneck — pipeline vrij</div>
           )}
@@ -206,13 +270,14 @@ export default function Dashboard(props: {
                     <div className="crew-name">{c.name}</div>
                     <div className="crew-role">{c.role}</div>
                     <div className="crew-task">{c.task}</div>
+                    <div className="venture-tag">Bezig aan: {ventureName(c.current_venture_id) || "—"}</div>
                   </div>
                   <div className="crew-actions">
                     <span className={"tag " + STATUS_TAG[c.status]}>{STATUS_LABEL[c.status]}</span>
                     <button className="icon-btn" onClick={() => setEditCrewId(c.id)} aria-label="Bewerk">✎</button>
                   </div>
                 </div>
-                {editCrewId === c.id && <CrewForm crew={c} onCancel={() => setEditCrewId(null)} onSave={(s, t, n) => saveCrew(c, s, t, n)} />}
+                {editCrewId === c.id && <CrewForm crew={c} ventures={ventures} onCancel={() => setEditCrewId(null)} onSave={(s, t, n, vid) => saveCrew(c, s, t, n, vid)} />}
               </div>
             ))}
             <div className="crew-card vacant">
@@ -229,12 +294,12 @@ export default function Dashboard(props: {
           </div>
 
           <div className="gitlog">
-            <div className="gitlog-head">Recente Git-activiteit ({commits.length ? commits[0].repo : "—"})</div>
-            {commits.length === 0 && <div className="gitlog-empty">Nog geen commits binnengekomen — zie README voor de webhook-setup.</div>}
-            {commits.map((g) => (
+            <div className="gitlog-head">Recente Git-activiteit{selectedVenture ? ` — ${selectedVenture.name}` : " — alle ventures"}</div>
+            {visibleCommits.length === 0 && <div className="gitlog-empty">Nog geen commits binnengekomen — zie README voor de webhook-setup.</div>}
+            {visibleCommits.map((g) => (
               <div className="gitlog-line" key={g.id}>
                 <span className="gl-time">{new Date(g.ts).toLocaleTimeString("nl-BE", { hour: "2-digit", minute: "2-digit" })}</span>
-                <span>{g.message}</span>
+                <span>{g.message}{!selectedVenture && g.venture_id ? ` (${ventureName(g.venture_id)})` : ""}</span>
                 {g.pass_to && <span className="gl-pass">[PASS:{g.pass_to.toUpperCase()}]</span>}
               </div>
             ))}
@@ -250,25 +315,26 @@ export default function Dashboard(props: {
               <div key={stage}>
                 <div className="col-head"><b>{pad(idx + 1)}</b> {STAGE_LABEL[stage]}</div>
                 <div className="col-body">
-                  {pipeline.filter((p) => p.stage === stage).map((p) => (
-                    <div className="app-card" key={p.id}>
-                      <div className="app-head" onClick={() => setOpenAppId(openAppId === p.id ? null : p.id)}>
-                        <span className="app-name-row"><span className="app-name">{p.name}</span>{p.stage === "sprint" && <span className="app-badge">In Productie</span>}</span>
-                        <span className={"chev" + (openAppId === p.id ? " open" : "")}>⌄</span>
+                  {ventures.filter((v) => v.stage === stage).map((v) => (
+                    <div className="app-card" key={v.id}>
+                      <div className="app-head" onClick={() => setOpenVentureId(openVentureId === v.id ? null : v.id)}>
+                        <span className="app-name-row"><span className="app-name">{v.name}</span>{v.stage === "sprint" && <span className="app-badge">In Productie</span>}</span>
+                        <span className={"chev" + (openVentureId === v.id ? " open" : "")}>⌄</span>
                       </div>
-                      {openAppId === p.id && (
-                        editAppId === p.id ? (
-                          <AppForm app={p} onCancel={() => setEditAppId(null)} onSave={(patch) => saveApp(p, patch)} />
+                      {openVentureId === v.id && (
+                        editVentureId === v.id ? (
+                          <VentureForm venture={v} crew={crew} onCancel={() => setEditVentureId(null)} onSave={(patch) => saveVenture(v, patch)} />
                         ) : (
                           <div className="detail-inner">
-                            <div className="detail-row"><span>Prijs / potentieel</span><span>{p.price}</span></div>
-                            {p.feature && <div className="detail-row"><span>Feature</span><span>{p.feature}</span></div>}
+                            <div className="detail-row"><span>Prijs / potentieel</span><span>{v.price}</span></div>
+                            {v.feature && <div className="detail-row"><span>Feature</span><span>{v.feature}</span></div>}
+                            {v.pitched_by && <div className="detail-row"><span>Gepitcht door</span><span>{crew.find((c) => c.id === v.pitched_by)?.name ?? v.pitched_by}</span></div>}
                             <div className="isolation">
-                              <span className={"iso-item " + (p.repo_done ? "done" : "pending")}>{p.repo_done ? "●" : "○"} Repo</span>
-                              <span className={"iso-item " + (p.domein_done ? "done" : "pending")}>{p.domein_done ? "●" : "○"} Domein</span>
-                              <span className={"iso-item " + (p.stripe_done ? "done" : "pending")}>{p.stripe_done ? "●" : "○"} Stripe</span>
+                              <span className={"iso-item " + (v.repo_done ? "done" : "pending")}>{v.repo_done ? "●" : "○"} Repo</span>
+                              <span className={"iso-item " + (v.domein_done ? "done" : "pending")}>{v.domein_done ? "●" : "○"} Domein</span>
+                              <span className={"iso-item " + (v.stripe_done ? "done" : "pending")}>{v.stripe_done ? "●" : "○"} Stripe</span>
                             </div>
-                            <div className="edit-actions" style={{ marginTop: 10 }}><button className="btn" onClick={() => setEditAppId(p.id)}>Bewerken</button></div>
+                            <div className="edit-actions" style={{ marginTop: 10 }}><button className="btn" onClick={() => setEditVentureId(v.id)}>Bewerken</button></div>
                           </div>
                         )
                       )}
@@ -281,9 +347,72 @@ export default function Dashboard(props: {
         </div>
       </div>
 
+      {/* PRESTATIES */}
+      <div className="section-head"><span className="section-num">04</span><span className="section-title">Prestaties</span><span className="section-line" /></div>
+      <p className="section-sub">Commits uit Git zijn automatisch; outreach/scouting log je handmatig hieronder</p>
+      <div className="perf-grid">
+        {crew.map((c) => {
+          const sevenDaysAgo = now - 7 * 24 * 3600 * 1000;
+          const commitCount = commits.filter((cm) => cm.crew_id === c.id && new Date(cm.ts).getTime() > sevenDaysAgo).length;
+          const handoffCount = crewEvents.filter((e) => e.crew_id === c.id && e.to_status === "bottleneck" && e.source === "webhook" && new Date(e.ts).getTime() > sevenDaysAgo).length;
+          const recentMetrics = metrics.filter((m) => m.crew_id === c.id).slice(0, 3);
+          return (
+            <div className="perf-card" key={c.id}>
+              <div className="perf-name">{c.name}</div>
+              <div className="perf-stats">
+                <div><div className="perf-stat-num">{commitCount}</div><div className="perf-stat-label">Commits (7d)</div></div>
+                <div><div className="perf-stat-num">{handoffCount}</div><div className="perf-stat-label">PASS ontvangen (7d)</div></div>
+              </div>
+              <div className="perf-metrics">
+                {recentMetrics.length === 0 && <div className="perf-metric-empty">Nog geen metrics gelogd.</div>}
+                {recentMetrics.map((m) => (
+                  <div className="perf-metric-line" key={m.id}><span>{METRIC_LABELS[m.label] ?? m.label} ({m.period})</span><span>{m.value}</span></div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <MetricForm crew={crew} ventures={ventures} me={me} defaultPeriod={isoWeek(new Date())} onNeedsIdentity={needsIdentity} onSubmit={(body) => post("/api/metrics", body)} />
+
+      {/* UITBETALINGEN */}
+      <div className="section-head"><span className="section-num">05</span><span className="section-title">Uitbetalingen</span><span className="section-line" /></div>
+      <p className="section-sub">Alleen een overzicht — dit voert nooit zelf een betaling uit, jij betaalt en logt het hier</p>
+      <div className="ledger-wrap">
+        <table className="ledger-table">
+          <thead><tr><th>Venture</th><th className="num">MRR</th><th>Gepitcht door</th><th className="num">Zende royalty (5%)</th><th className="num">House-aandeel</th></tr></thead>
+          <tbody>
+            {ventures.filter((v) => v.mrr > 0).map((v) => {
+              const royalty = v.pitched_by === "zende" ? v.mrr * 0.05 : 0;
+              return (
+                <tr key={v.id}>
+                  <td>{v.name}</td>
+                  <td className="num">{fmtEUR(v.mrr)}</td>
+                  <td>{crew.find((c) => c.id === v.pitched_by)?.name ?? "—"}</td>
+                  <td className="num">{royalty > 0 ? fmtEUR(royalty) : "—"}</td>
+                  <td className="num">{fmtEUR(v.mrr - royalty)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="gitlog" style={{ marginTop: 14 }}>
+        <div className="gitlog-head">Uitbetalingslog</div>
+        {payouts.length === 0 && <div className="gitlog-empty">Nog geen uitbetalingen gelogd.</div>}
+        {payouts.map((p) => (
+          <div className="gitlog-line" key={p.id}>
+            <span className="gl-time">{new Date(p.paid_at).toLocaleDateString("nl-BE")}</span>
+            <span>{crew.find((c) => c.id === p.crew_id)?.name ?? p.crew_id} — {fmtEUR(p.amount)}{p.note ? ` (${p.note})` : ""}</span>
+            <span className="gl-pass">door {p.recorded_by}</span>
+          </div>
+        ))}
+        <PayoutForm crew={crew} ventures={ventures} me={me} onNeedsIdentity={needsIdentity} onSubmit={(body) => post("/api/payouts", body)} />
+      </div>
+
       {/* CONSOLE */}
-      <div className="section-head"><span className="section-num">04</span><span className="section-title">VETO Console</span><span className="section-line" /></div>
-      <p className="section-sub">Matthias — rank 1, veto-macht</p>
+      <div className="section-head"><span className="section-num">06</span><span className="section-title">VETO Console</span><span className="section-line" /></div>
+      <p className="section-sub">Matthias — rank 1, veto-macht{selectedVenture ? ` — gericht op ${selectedVenture.name}` : " — algemeen"}</p>
       <div className="console">
         <div className="console-row">
           <span className="prompt-prefix">{(me || "GAST").toUpperCase()}@FLOWSYS:~$</span>
@@ -300,7 +429,7 @@ export default function Dashboard(props: {
           {directives.length === 0 && <div className="log-empty">Geen directives uitgegeven.</div>}
           {directives.map((d) => (
             <div className={"log-line " + d.type} key={d.id}>
-              <span className="ts">[{new Date(d.ts).toLocaleTimeString("nl-BE")}]</span> {d.type === "veto" ? "VETO" : "DIRECTIVE"} — {d.text} <span style={{ color: "var(--text-faint)" }}>({d.author})</span>
+              <span className="ts">[{new Date(d.ts).toLocaleTimeString("nl-BE")}]</span> {d.type === "veto" ? "VETO" : "DIRECTIVE"} — {d.text} <span style={{ color: "var(--text-faint)" }}>({d.author}{d.venture_id ? `, ${ventureName(d.venture_id)}` : ""})</span>
             </div>
           ))}
         </div>
@@ -321,10 +450,11 @@ function MrrForm({ initial, onCancel, onSave }: { initial: number; onCancel: () 
   );
 }
 
-function CrewForm({ crew, onCancel, onSave }: { crew: Crew; onCancel: () => void; onSave: (status: CrewStatus, task: string, note: string) => void }) {
+function CrewForm({ crew, ventures, onCancel, onSave }: { crew: Crew; ventures: Venture[]; onCancel: () => void; onSave: (status: CrewStatus, task: string, note: string, ventureId: string | null) => void }) {
   const [status, setStatus] = useState<CrewStatus>(crew.status);
   const [task, setTask] = useState(crew.task);
   const [note, setNote] = useState(crew.note);
+  const [ventureId, setVentureId] = useState(crew.current_venture_id ?? "");
   return (
     <div className="edit-form">
       <div><label>Status</label>
@@ -332,38 +462,109 @@ function CrewForm({ crew, onCancel, onSave }: { crew: Crew; onCancel: () => void
           {(Object.keys(STATUS_LABEL) as CrewStatus[]).map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </select>
       </div>
+      <div><label>Bezig aan (venture)</label>
+        <select value={ventureId} onChange={(e) => setVentureId(e.target.value)}>
+          <option value="">— geen —</option>
+          {ventures.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+        </select>
+      </div>
       <div><label>Taak / laatste actie</label><input className="field" value={task} onChange={(e) => setTask(e.target.value)} /></div>
       <div><label>PASS-notitie (optioneel)</label><input className="field" value={note} onChange={(e) => setNote(e.target.value)} /></div>
-      <div className="edit-actions"><button className="btn primary" onClick={() => onSave(status, task, note)}>Opslaan</button><button className="btn ghost" onClick={onCancel}>Annuleren</button></div>
+      <div className="edit-actions"><button className="btn primary" onClick={() => onSave(status, task, note, ventureId || null)}>Opslaan</button><button className="btn ghost" onClick={onCancel}>Annuleren</button></div>
     </div>
   );
 }
 
-function AppForm({ app, onCancel, onSave }: { app: PipelineApp; onCancel: () => void; onSave: (patch: Partial<PipelineApp>) => void }) {
-  const [stage, setStage] = useState(app.stage);
-  const [price, setPrice] = useState(app.price);
-  const [feature, setFeature] = useState(app.feature);
-  const [repo, setRepo] = useState(app.repo_done);
-  const [domein, setDomein] = useState(app.domein_done);
-  const [stripe, setStripe] = useState(app.stripe_done);
+function VentureForm({ venture, crew, onCancel, onSave }: { venture: Venture; crew: Crew[]; onCancel: () => void; onSave: (patch: Partial<Venture>) => void }) {
+  const [stage, setStage] = useState<Stage>(venture.stage);
+  const [price, setPrice] = useState(venture.price);
+  const [feature, setFeature] = useState(venture.feature);
+  const [githubRepo, setGithubRepo] = useState(venture.github_repo ?? "");
+  const [pitchedBy, setPitchedBy] = useState(venture.pitched_by ?? "");
+  const [repo, setRepo] = useState(venture.repo_done);
+  const [domein, setDomein] = useState(venture.domein_done);
+  const [stripe, setStripe] = useState(venture.stripe_done);
   return (
     <div className="edit-form">
       <div><label>Fase</label>
-        <select value={stage} onChange={(e) => setStage(e.target.value as PipelineApp["stage"])}>
-          {Object.keys(STAGE_LABEL).map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
+        <select value={stage} onChange={(e) => setStage(e.target.value as Stage)}>
+          {(Object.keys(STAGE_LABEL) as Stage[]).map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
         </select>
       </div>
       <div><label>Prijs / potentieel</label><input className="field" value={price} onChange={(e) => setPrice(e.target.value)} /></div>
       <div><label>Feature</label><input className="field" value={feature} onChange={(e) => setFeature(e.target.value)} /></div>
+      <div><label>GitHub-repo (voor de webhook)</label><input className="field" value={githubRepo} onChange={(e) => setGithubRepo(e.target.value)} placeholder="bv. suppliersync" /></div>
+      <div><label>Gepitcht door</label>
+        <select value={pitchedBy} onChange={(e) => setPitchedBy(e.target.value)}>
+          <option value="">— onbekend / House —</option>
+          {crew.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </div>
       <div className="checks">
         <label className="check-label"><input type="checkbox" checked={repo} onChange={(e) => setRepo(e.target.checked)} /> Repo</label>
         <label className="check-label"><input type="checkbox" checked={domein} onChange={(e) => setDomein(e.target.checked)} /> Domein</label>
         <label className="check-label"><input type="checkbox" checked={stripe} onChange={(e) => setStripe(e.target.checked)} /> Stripe</label>
       </div>
       <div className="edit-actions">
-        <button className="btn primary" onClick={() => onSave({ stage, price, feature, repo_done: repo, domein_done: domein, stripe_done: stripe })}>Opslaan</button>
+        <button className="btn primary" onClick={() => onSave({ stage, price, feature, github_repo: githubRepo || null, pitched_by: pitchedBy || null, repo_done: repo, domein_done: domein, stripe_done: stripe })}>Opslaan</button>
         <button className="btn ghost" onClick={onCancel}>Annuleren</button>
       </div>
+    </div>
+  );
+}
+
+function MetricForm({ crew, ventures, me, defaultPeriod, onNeedsIdentity, onSubmit }: {
+  crew: Crew[]; ventures: Venture[]; me: string; defaultPeriod: string;
+  onNeedsIdentity: () => boolean; onSubmit: (body: unknown) => Promise<boolean>;
+}) {
+  const [crewId, setCrewId] = useState(crew[0]?.id ?? "");
+  const [label, setLabel] = useState("outreach_contacted");
+  const [ventureId, setVentureId] = useState("");
+  const [value, setValue] = useState<number>(0);
+  const [period, setPeriod] = useState(defaultPeriod);
+  const [note, setNote] = useState("");
+
+  async function submit() {
+    if (onNeedsIdentity()) return;
+    const ok = await onSubmit({ crew_id: crewId, venture_id: ventureId || null, label, value, period, note: note || null });
+    if (ok) { setValue(0); setNote(""); }
+  }
+
+  return (
+    <div className="form-inline">
+      <select value={crewId} onChange={(e) => setCrewId(e.target.value)}>{crew.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+      <select value={label} onChange={(e) => setLabel(e.target.value)}>{Object.keys(METRIC_LABELS).map((k) => <option key={k} value={k}>{METRIC_LABELS[k]}</option>)}</select>
+      <select value={ventureId} onChange={(e) => setVentureId(e.target.value)}><option value="">— algemeen —</option>{ventures.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select>
+      <input className="field" type="number" value={value} onChange={(e) => setValue(parseFloat(e.target.value || "0"))} style={{ maxWidth: 90 }} />
+      <input className="field" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ maxWidth: 100 }} title="ISO-week, bv. 2026-W35" />
+      <input className="field" placeholder="notitie (optioneel)" value={note} onChange={(e) => setNote(e.target.value)} />
+      <button className="btn primary" onClick={submit}>+ Metric loggen</button>
+    </div>
+  );
+}
+
+function PayoutForm({ crew, ventures, me, onNeedsIdentity, onSubmit }: {
+  crew: Crew[]; ventures: Venture[]; me: string; onNeedsIdentity: () => boolean; onSubmit: (body: unknown) => Promise<boolean>;
+}) {
+  const [crewId, setCrewId] = useState("zende");
+  const [ventureId, setVentureId] = useState("");
+  const [amount, setAmount] = useState<number>(0);
+  const [note, setNote] = useState("");
+
+  async function submit() {
+    if (onNeedsIdentity()) return;
+    if (!amount || amount <= 0) { window.alert("Vul een bedrag > 0 in."); return; }
+    const ok = await onSubmit({ crew_id: crewId, venture_id: ventureId || null, amount, note: note || null, recorded_by: me });
+    if (ok) { setAmount(0); setNote(""); }
+  }
+
+  return (
+    <div className="form-inline">
+      <select value={crewId} onChange={(e) => setCrewId(e.target.value)}>{crew.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+      <select value={ventureId} onChange={(e) => setVentureId(e.target.value)}><option value="">— algemeen —</option>{ventures.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select>
+      <input className="field" type="number" placeholder="bedrag €" value={amount || ""} onChange={(e) => setAmount(parseFloat(e.target.value || "0"))} style={{ maxWidth: 110 }} />
+      <input className="field" placeholder="notitie (optioneel)" value={note} onChange={(e) => setNote(e.target.value)} />
+      <button className="btn primary" onClick={submit}>+ Uitbetaling loggen</button>
     </div>
   );
 }

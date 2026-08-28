@@ -11,6 +11,7 @@ export async function POST(req: NextRequest) {
   const db = supabaseAdmin();
   const { error } = await db.from("directives").insert({
     author,
+    venture_id: body?.venture_id || null,
     type: isVeto ? "veto" : "directive",
     text,
   });

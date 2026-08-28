@@ -5,22 +5,33 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const db = supabaseAdmin();
-  const [{ data: crew }, { data: pipeline }, { data: commits }, { data: directives }, { data: telemetryRows }] =
-    await Promise.all([
-      db.from("crew").select("*").order("rank", { ascending: true }),
-      db.from("pipeline").select("*"),
-      db.from("commits").select("*").order("ts", { ascending: false }).limit(6),
-      db.from("directives").select("*").order("ts", { ascending: false }).limit(12),
-      db.from("telemetry").select("*").eq("id", 1).limit(1),
-    ]);
+  const [
+    { data: crew },
+    { data: ventures },
+    { data: commits },
+    { data: directives },
+    { data: crewEvents },
+    { data: metrics },
+    { data: payouts },
+  ] = await Promise.all([
+    db.from("crew").select("*").order("rank", { ascending: true }),
+    db.from("ventures").select("*"),
+    db.from("commits").select("*").order("ts", { ascending: false }).limit(200),
+    db.from("directives").select("*").order("ts", { ascending: false }).limit(12),
+    db.from("crew_events").select("*").order("ts", { ascending: false }).limit(200),
+    db.from("metrics").select("*").order("created_at", { ascending: false }).limit(100),
+    db.from("payouts").select("*").order("paid_at", { ascending: false }).limit(50),
+  ]);
 
   return (
     <Dashboard
       initialCrew={crew ?? []}
-      initialPipeline={pipeline ?? []}
+      initialVentures={ventures ?? []}
       initialCommits={commits ?? []}
       initialDirectives={directives ?? []}
-      initialTelemetry={telemetryRows?.[0] ?? null}
+      initialCrewEvents={crewEvents ?? []}
+      initialMetrics={metrics ?? []}
+      initialPayouts={payouts ?? []}
     />
   );
 }

@@ -23,7 +23,8 @@ Reken op **30-45 minuten** voor de eerste keer, éénmalig. Volg de stappen in v
 1. Ga naar https://supabase.com/dashboard → **New project**. Kies een naam (bv. `flow-systems-ops`) en een wachtwoord (bewaar dat, niet nodig hierna maar Supabase vraagt het).
 2. Zodra het project klaar is: ga naar **SQL Editor** → **New query**.
 3. Open [supabase/schema.sql](supabase/schema.sql) uit deze map, kopieer de volledige inhoud, plak in de SQL Editor, klik **Run**.
-   Dit maakt alle tabellen aan (`crew`, `pipeline`, `commits`, `directives`, `telemetry`), zet de standaard-data erin (Laurens/Seba/Runar/Zende, SupplierSync/Tendertox/CartRescue/DisputeNuke), en schakelt Realtime in.
+   Dit maakt alle tabellen aan (`crew`, `ventures`, `commits`, `directives`, `crew_events`, `metrics`, `payouts`), zet de standaard-data erin (Laurens/Seba/Runar/Zende, SupplierSync/Tendertox/CartRescue/DisputeNuke), en schakelt Realtime in.
+   **Had je hiervoor al eens de oude versie van dit bestand gedraaid** (met een `pipeline`- en `telemetry`-tabel)? Draai dan in plaats daarvan [supabase/MIGRATION_v1_to_v2.sql](supabase/MIGRATION_v1_to_v2.sql) — dat zet je bestaande data om naar het nieuwe multi-venture schema in plaats van alles opnieuw te beginnen.
 4. Ga naar **Project Settings → API**. Je hebt straks drie waarden nodig:
    - `Project URL` → dit wordt `NEXT_PUBLIC_SUPABASE_URL`
    - `anon public` key → dit wordt `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -60,18 +61,18 @@ git push -u origin main
 
 3. Klik **Deploy**. Na ~1 minuut krijg je een URL zoals `https://flow-systems-ops.vercel.app`.
 
-## 4. GitHub-usernames koppelen (voor commit-attributie)
+## 4. GitHub-usernames én repo-namen koppelen
 
-Zodat een commit van Laurens ook echt zijn kaart bijwerkt, moet Supabase weten welk
-GitHub-account bij welke naam hoort.
+Twee tabellen invullen in **Supabase-dashboard → Table Editor**, vóór je de webhook toevoegt:
 
-1. Supabase-dashboard → **Table Editor** → tabel `crew`.
-2. Vul per rij de kolom `github_username` in met het GitHub-account (kleine letters, zonder `@`)
-   van Laurens, Seba, Runar en Zende.
-
-Zonder dit werkt de webhook nog steeds (commits worden gelogd), maar de "wie is de
-eigenaar"-status wordt dan alleen bijgewerkt via het `[PASS:NAAM]`-doel, niet via wie
-er pushte.
+1. Tabel `crew` → vul per rij `github_username` in (kleine letters, zonder `@`) van
+   Laurens, Seba, Runar en Zende. Zonder dit werkt de webhook nog steeds (commits worden
+   gelogd), maar de "wie is de eigenaar"-status wisselt dan alleen via het
+   `[PASS:NAAM]`-doel, niet via wie er zelf pushte.
+2. Tabel `ventures` → vul per rij `github_repo` in met de exacte GitHub-repo-naam
+   (bv. `suppliersync`). Zonder dit weet de app niet bij welk dochterbedrijf een commit
+   hoort, en belandt hij ongesorteerd onderaan. (Kan ook later, in het dashboard zelf,
+   via "Bewerken" op een pipeline-kaart.)
 
 ## 5. De webhook — per dochterbedrijf-repo
 
@@ -110,6 +111,29 @@ commit-boodschap als taak — geen eigenaarswissel.
 Alles wat niet via Git gaat (MRR, sprint-klok, pipeline-fases, VETO's) blijft handmatig
 bewerkbaar in het dashboard zelf, met dezelfde knoppen als voorheen.
 
+## Wat er van A tot Z in zit
+
+- **00 · Venture Overzicht** — bovenaan de pagina, een rij compacte tegels, één per
+  dochterbedrijf: status (loopt / stil / bottleneck / exit ready), MRR, en wie er nu
+  actief op zit. Klik een tegel om de rest van de pagina (telemetrie, git-log, VETO's)
+  op die venture te focussen; klik nogmaals om terug te gaan naar het totaaloverzicht.
+  Dit is de "in 5 seconden zien of alles oké is"-laag.
+- **02 · Squad** — elke persoon toont nu ook **"Bezig aan: ‹venture›"**, bijgewerkt door
+  de webhook of handmatig via Bewerken.
+- **04 · Prestaties** — per persoon: commits van de laatste 7 dagen (automatisch uit
+  Git) en aantal keer dat ze een PASS ontvingen (= de bal kregen toegespeeld). Voor
+  werk dat niet in Git zit (Runar's outreach-cijfers, Zende's scouting) staat er een
+  logformulier onderaan — kies persoon, type metric, waarde, week, en het verschijnt
+  meteen op hun kaart.
+- **05 · Uitbetalingen** — een reken-tabel, geen betaalknop: per venture MRR, wie het
+  pitchte, en (als dat Zende was) zijn 5%-royalty vs. het House-aandeel — rechtstreeks
+  uit de regel in [Equity-Agreements.md](../00-Flow-Systems-HQ/Team/Equity-Agreements.md).
+  Daaronder een logboek van wat je *echt* al hebt uitbetaald (handmatig ingevoerd) —
+  zo zie je in één oogopslag verschuldigd vs. betaald, zonder dat de app ooit zelf geld
+  verplaatst.
+- **06 · VETO Console** — ongewijzigd, met één toevoeging: als je een venture hebt
+  geselecteerd in laag 00, wordt de directive daaraan gekoppeld.
+
 ## Lokaal ontwikkelen (optioneel)
 
 Node.js was niet geïnstalleerd op deze laptop tijdens het bouwen, dus dit is niet
@@ -132,3 +156,10 @@ npm run dev
 - Elke dochterbedrijf-repo heeft zijn **eigen** webhook naar dezelfde Vercel-app — dat
   past bij de Exit Isolatie-regel (1 repo per app blijft 1 repo), het dashboard is
   gewoon de plek waar alle seintjes samenkomen.
+- **Metrics (outreach, scouting) zijn zelf-gerapporteerd**, niet geverifieerd — net als
+  vroeger in een spreadsheet. Alleen commits en PASS-handoffs zijn hard, want die komen
+  rechtstreeks uit Git.
+- **De royalty-berekening is een lopend maandbedrag** (MRR × 5%), geen cumulatief
+  "sinds wanneer is dit verschuldigd"-saldo. Voor een eerste versie is dat bewust simpel
+  gehouden; zeg het als je wil dat ik er een startdatum-per-venture en een echt
+  openstaand-saldo van maak.

@@ -171,3 +171,45 @@ footer { margin-top: 40px; font-family: var(--font-mono); font-size: 10.5px; let
 
 .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px; display: flex; flex-direction: column; gap: 14px; width: 320px; }
 .login-error { color: var(--critical); font-family: var(--font-mono); font-size: 12px; }
+
+/* venture overview strip */
+.venture-strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.venture-chip {
+  flex: 0 0 auto; min-width: 168px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px; cursor: pointer; text-align: left;
+  border-left: 3px solid var(--idle);
+}
+.venture-chip.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.venture-chip.status-good { border-left-color: var(--good); }
+.venture-chip.status-warn { border-left-color: var(--accent); }
+.venture-chip.status-bad { border-left-color: var(--critical); }
+.venture-chip .vc-name { font-weight: 600; font-size: 13.5px; color: var(--text); }
+.venture-chip .vc-stage { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-faint); margin-top: 2px; }
+.venture-chip .vc-mrr { font-family: var(--font-mono); font-size: 15px; font-variant-numeric: tabular-nums; color: var(--text); margin-top: 8px; }
+.venture-chip .vc-who { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); margin-top: 6px; }
+.venture-chip .vc-status-label { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 6px; }
+.venture-chip.status-good .vc-status-label { color: var(--good); }
+.venture-chip.status-warn .vc-status-label { color: var(--accent); }
+.venture-chip.status-bad .vc-status-label { color: var(--critical); }
+.venture-tag { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); margin-top: 4px; }
+
+/* performance cards */
+.perf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.perf-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 13px 14px; }
+.perf-name { font-weight: 600; font-size: 14px; }
+.perf-stats { display: flex; gap: 16px; margin-top: 10px; }
+.perf-stat-num { font-family: var(--font-mono); font-size: 20px; font-weight: 600; color: var(--text); line-height: 1; }
+.perf-stat-label { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 3px; }
+.perf-metrics { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
+.perf-metric-line { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); display: flex; justify-content: space-between; gap: 8px; }
+.perf-metric-empty { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); font-style: italic; }
+
+/* payouts / ledger */
+.ledger-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; }
+.ledger-table th { text-align: left; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-faint); padding: 0 10px 8px 0; border-bottom: 1px solid var(--border); font-weight: 500; }
+.ledger-table td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--border); color: var(--text-dim); }
+.ledger-table td:first-child, .ledger-table th:first-child { padding-left: 0; }
+.ledger-table td.num, .ledger-table th.num { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+.ledger-wrap { overflow-x: auto; }
+.form-inline { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+.form-inline .field, .form-inline select { flex: 1; min-width: 110px; }
