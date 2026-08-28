@@ -31,17 +31,11 @@ Reken op **30-45 minuten** voor de eerste keer, éénmalig. Volg de stappen in v
 
 ## 2. Code naar GitHub
 
-Deze map (`03-Ops-Webapp`) is een op-zichzelf-staand project — het hoort niet in het
-Obsidian-vault-repo (als dat er ooit een wordt), het moet zijn **eigen** GitHub-repo krijgen.
+Deze map (`03-Ops-Webapp`) is al een lokale git-repo met één commit erin — op zichzelf
+staand, hoort niet bij een eventuele vault-repo. Nog te doen: een lege repo op GitHub
+aanmaken en pushen.
 
-```bash
-cd "03-Ops-Webapp"
-git init
-git add .
-git commit -m "Initial commit: Flow Systems Command Center"
-```
-
-Maak dan op GitHub een nieuwe, **private** repo (bv. `flow-systems-ops`), zonder README/`.gitignore`
+Maak op GitHub een nieuwe, **private** repo (bv. `flow-systems-ops`), zonder README/`.gitignore`
 (die heb je al), en volg de instructies die GitHub toont onder "…or push an existing repository":
 
 ```bash
