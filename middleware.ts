@@ -3,14 +3,14 @@ import { COOKIE_NAME, isValidSessionToken } from "./lib/session";
 
 const PUBLIC_PATHS = ["/login", "/api/auth", "/api/github-webhook"];
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
     return NextResponse.next();
   }
 
   const token = req.cookies.get(COOKIE_NAME)?.value;
-  if (isValidSessionToken(token)) return NextResponse.next();
+  if (await isValidSessionToken(token)) return NextResponse.next();
 
   if (pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   }
 
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(COOKIE_NAME, makeSessionToken(), {
+  res.cookies.set(COOKIE_NAME, await makeSessionToken(), {
     httpOnly: true,
     secure: true,
     sameSite: "lax",
