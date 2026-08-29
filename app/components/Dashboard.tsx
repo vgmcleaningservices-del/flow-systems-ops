@@ -15,6 +15,7 @@ interface Venture {
   repo_done: boolean; domein_done: boolean; stripe_done: boolean;
   github_repo: string | null; pitched_by: string | null;
   mrr: number; mrr_prev: number; sprint_deadline: string | null; sprint_label: string;
+  mrr_source_url: string | null; mrr_synced_at: string | null; notion_url: string | null;
 }
 interface CommitRow { id: number; repo: string; venture_id: string | null; crew_id: string | null; sha: string; message: string; author: string; pass_to: string | null; ts: string; }
 interface Directive { id: number; venture_id: string | null; author: string; type: "directive" | "veto"; text: string; ts: string; }
@@ -75,6 +76,7 @@ export default function Dashboard(props: {
   const [openVentureId, setOpenVentureId] = useState<string | null>(null);
   const [editVentureId, setEditVentureId] = useState<string | null>(null);
   const [directiveText, setDirectiveText] = useState("");
+  const [syncingMrr, setSyncingMrr] = useState(false);
 
   useEffect(() => {
     try { setMe(localStorage.getItem("flowsys_me") || ""); } catch {}
@@ -171,6 +173,11 @@ export default function Dashboard(props: {
     await post("/api/venture", { id: v.id, ...patch });
     setEditVentureId(null);
   }
+  async function syncMrr() {
+    setSyncingMrr(true);
+    await fetch("/api/mrr-sync", { method: "POST" }).catch(() => {});
+    setSyncingMrr(false);
+  }
   async function deploy() {
     if (needsIdentity()) return;
     const text = directiveText.trim();
@@ -213,7 +220,7 @@ export default function Dashboard(props: {
             <button key={v.id} className={`venture-chip ${cls} ${selectedVentureId === v.id ? "selected" : ""}`} onClick={() => setSelectedVentureId(selectedVentureId === v.id ? null : v.id)}>
               <div className="vc-name">{v.name}</div>
               <div className="vc-stage">{STAGE_LABEL[v.stage]}</div>
-              {v.mrr > 0 && <div className="vc-mrr">{fmtEUR(v.mrr)}</div>}
+              {v.mrr > 0 && <div className="vc-mrr">{fmtEUR(v.mrr)}{v.mrr_source_url && <span className="vc-live">live</span>}</div>}
               <div className="vc-status-label">{label}</div>
               <div className="vc-who">{workers.length ? workers.map((w) => w.name).join(", ") : "niemand actief"}</div>
             </button>
@@ -228,7 +235,10 @@ export default function Dashboard(props: {
         <div className="tile">
           <div className="tile-label">
             <span>{selectedVenture ? "Venture MRR" : "Holding MRR"}</span>
-            {selectedVenture && <button className="icon-btn" onClick={() => setEditMrrVentureId(selectedVenture.id)} aria-label="Bewerk MRR">✎</button>}
+            <span style={{ display: "flex", gap: 4 }}>
+              <button className="icon-btn" onClick={syncMrr} disabled={syncingMrr} aria-label="Sync live MRR via Stripe" title="Haal live MRR op via Stripe">{syncingMrr ? "…" : "⟳"}</button>
+              {selectedVenture && <button className="icon-btn" onClick={() => setEditMrrVentureId(selectedVenture.id)} aria-label="Bewerk MRR">✎</button>}
+            </span>
           </div>
           {editMrrVentureId && selectedVenture ? (
             <MrrForm initial={selectedVenture.mrr} onCancel={() => setEditMrrVentureId(null)} onSave={(v) => saveMrr(selectedVenture.id, v)} />
@@ -237,7 +247,13 @@ export default function Dashboard(props: {
               {mrrPrev > 0 && <span className={"tile-delta " + (deltaPct >= 0 ? "up" : "down")}>{deltaPct >= 0 ? "▲" : "▼"} {Math.abs(deltaPct).toFixed(1)}%</span>}
             </div>
           )}
-          <div className="tile-foot">{selectedVenture ? "Klik ✎ om bij te werken" : `Som van ${ventures.length} ventures`}</div>
+          <div className="tile-foot">
+            {selectedVenture
+              ? selectedVenture.mrr_source_url
+                ? `Live via Stripe · gesynct ${relTime(selectedVenture.mrr_synced_at)}`
+                : "Klik ✎ om bij te werken"
+              : `Som van ${ventures.length} ventures${ventures.some((v) => v.mrr_source_url) ? ` · ${ventures.filter((v) => v.mrr_source_url).length} live via Stripe` : ""}`}
+          </div>
         </div>
         <div className="tile">
           <div className="tile-label"><span>Projected Exit Waardering</span></div>
@@ -329,6 +345,7 @@ export default function Dashboard(props: {
                             <div className="detail-row"><span>Prijs / potentieel</span><span>{v.price}</span></div>
                             {v.feature && <div className="detail-row"><span>Feature</span><span>{v.feature}</span></div>}
                             {v.pitched_by && <div className="detail-row"><span>Gepitcht door</span><span>{crew.find((c) => c.id === v.pitched_by)?.name ?? v.pitched_by}</span></div>}
+                            {v.notion_url && <div className="detail-row"><span>Notities</span><span><a href={v.notion_url} target="_blank" rel="noreferrer">Open in Notion →</a></span></div>}
                             <div className="isolation">
                               <span className={"iso-item " + (v.repo_done ? "done" : "pending")}>{v.repo_done ? "●" : "○"} Repo</span>
                               <span className={"iso-item " + (v.domein_done ? "done" : "pending")}>{v.domein_done ? "●" : "○"} Domein</span>
@@ -480,6 +497,8 @@ function VentureForm({ venture, crew, onCancel, onSave }: { venture: Venture; cr
   const [price, setPrice] = useState(venture.price);
   const [feature, setFeature] = useState(venture.feature);
   const [githubRepo, setGithubRepo] = useState(venture.github_repo ?? "");
+  const [mrrSourceUrl, setMrrSourceUrl] = useState(venture.mrr_source_url ?? "");
+  const [notionUrl, setNotionUrl] = useState(venture.notion_url ?? "");
   const [pitchedBy, setPitchedBy] = useState(venture.pitched_by ?? "");
   const [repo, setRepo] = useState(venture.repo_done);
   const [domein, setDomein] = useState(venture.domein_done);
@@ -494,6 +513,8 @@ function VentureForm({ venture, crew, onCancel, onSave }: { venture: Venture; cr
       <div><label>Prijs / potentieel</label><input className="field" value={price} onChange={(e) => setPrice(e.target.value)} /></div>
       <div><label>Feature</label><input className="field" value={feature} onChange={(e) => setFeature(e.target.value)} /></div>
       <div><label>GitHub-repo (voor de webhook)</label><input className="field" value={githubRepo} onChange={(e) => setGithubRepo(e.target.value)} placeholder="bv. suppliersync" /></div>
+      <div><label>MRR-endpoint (voor live Stripe-sync)</label><input className="field" value={mrrSourceUrl} onChange={(e) => setMrrSourceUrl(e.target.value)} placeholder="bv. https://www.tendertox.com/api/mrr" /></div>
+      <div><label>Notion-link (optioneel)</label><input className="field" value={notionUrl} onChange={(e) => setNotionUrl(e.target.value)} placeholder="https://notion.so/..." /></div>
       <div><label>Gepitcht door</label>
         <select value={pitchedBy} onChange={(e) => setPitchedBy(e.target.value)}>
           <option value="">— onbekend / House —</option>
@@ -506,7 +527,7 @@ function VentureForm({ venture, crew, onCancel, onSave }: { venture: Venture; cr
         <label className="check-label"><input type="checkbox" checked={stripe} onChange={(e) => setStripe(e.target.checked)} /> Stripe</label>
       </div>
       <div className="edit-actions">
-        <button className="btn primary" onClick={() => onSave({ stage, price, feature, github_repo: githubRepo || null, pitched_by: pitchedBy || null, repo_done: repo, domein_done: domein, stripe_done: stripe })}>Opslaan</button>
+        <button className="btn primary" onClick={() => onSave({ stage, price, feature, github_repo: githubRepo || null, mrr_source_url: mrrSourceUrl || null, notion_url: notionUrl || null, pitched_by: pitchedBy || null, repo_done: repo, domein_done: domein, stripe_done: stripe })}>Opslaan</button>
         <button className="btn ghost" onClick={onCancel}>Annuleren</button>
       </div>
     </div>

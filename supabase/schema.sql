@@ -30,6 +30,9 @@ create table if not exists ventures (
   pitched_by text references crew(id), -- who scouted this idea -- drives Zende's royalty
   mrr int not null default 0,
   mrr_prev int not null default 0,
+  mrr_source_url text,                -- if set, /api/mrr-sync pulls real MRR from this venture's own /api/mrr
+  mrr_synced_at timestamptz,          -- when mrr was last refreshed from mrr_source_url
+  notion_url text,                    -- optional link to this venture's Notion doc/notes page
   sprint_deadline timestamptz,
   sprint_label text not null default '',
   updated_at timestamptz not null default now()

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { COOKIE_NAME, isValidSessionToken } from "./lib/session";
 
-const PUBLIC_PATHS = ["/login", "/api/auth", "/api/github-webhook"];
+const PUBLIC_PATHS = ["/login", "/api/auth", "/api/github-webhook", "/api/mrr-sync"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

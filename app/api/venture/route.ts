@@ -14,10 +14,12 @@ export async function POST(req: NextRequest) {
   if (typeof body.repo_done === "boolean") update.repo_done = body.repo_done;
   if (typeof body.domein_done === "boolean") update.domein_done = body.domein_done;
   if (typeof body.stripe_done === "boolean") update.stripe_done = body.stripe_done;
-  // These two may legitimately be sent as null (clearing them) — check for the key,
+  // These may legitimately be sent as null (clearing them) — check for the key,
   // not the type, so clearing isn't silently dropped.
   if ("github_repo" in body) update.github_repo = body.github_repo || null;
   if ("pitched_by" in body) update.pitched_by = body.pitched_by || null;
+  if ("mrr_source_url" in body) update.mrr_source_url = body.mrr_source_url || null;
+  if ("notion_url" in body) update.notion_url = body.notion_url || null;
 
   if (typeof body.mrr === "number") {
     const { data: current } = await db.from("ventures").select("mrr").eq("id", body.id).single();
