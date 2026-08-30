@@ -7,4 +7,6 @@ export const ALL_PEOPLE: { id: string; name: string }[] = [
   { id: "runar", name: "Runar" },
   { id: "seba", name: "Seba" },
   { id: "zende", name: "Zende" },
+  { id: "steven", name: "Steven" },
+  { id: "jordy", name: "Jordy" },
 ];
