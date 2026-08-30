@@ -1,9 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseClient";
+import { ALL_PEOPLE } from "@/lib/people";
 
 type CrewStatus = "waiting" | "active" | "bottleneck" | "auto";
 type Stage = "scouting" | "sprint" | "exit-ready";
+type TaskStatus = "todo" | "in_progress" | "handed_off" | "done";
 
 interface Crew {
   id: string; name: string; rank: string; role: string;
@@ -22,11 +24,23 @@ interface Directive { id: number; venture_id: string | null; author: string; typ
 interface CrewEvent { id: number; crew_id: string; venture_id: string | null; from_status: string | null; to_status: string; source: string; ts: string; }
 interface Metric { id: number; crew_id: string; venture_id: string | null; label: string; value: number; period: string; note: string | null; created_at: string; }
 interface Payout { id: number; crew_id: string; venture_id: string | null; amount: number; note: string | null; paid_at: string; recorded_by: string; }
+interface Task {
+  id: number; venture_id: string; title: string; description: string; status: TaskStatus;
+  created_by: string; assigned_to: string; handed_off_by: string | null; handed_off_at: string | null;
+  created_at: string; updated_at: string;
+}
 
 const STATUS_LABEL: Record<CrewStatus, string> = { waiting: "Wachtend", active: "Geïsoleerd · Actief", bottleneck: "Active Bottleneck", auto: "Geautomatiseerd" };
 const STATUS_TAG: Record<CrewStatus, string> = { waiting: "t-waiting", active: "t-active", bottleneck: "t-bottleneck", auto: "t-auto" };
 const STAGE_LABEL: Record<Stage, string> = { scouting: "Concept / Scouting", sprint: "Actieve Sprint (72u)", "exit-ready": "Exit Ready" };
-const PEOPLE = ["Matthias", "Laurens", "Runar", "Seba", "Zende"];
+const TASK_STATUSES: TaskStatus[] = ["todo", "in_progress", "handed_off", "done"];
+const TASK_STATUS_LABEL: Record<TaskStatus, string> = { todo: "Te doen", in_progress: "Bezig", handed_off: "Doorgegeven", done: "Klaar" };
+const TASK_STATUS_TAG: Record<TaskStatus, string> = { todo: "t-todo", in_progress: "t-in_progress", handed_off: "t-handed_off", done: "t-done" };
+// Elke kolom een eigen betekenisvolle kleur (zelfde semantiek als de rest van dit
+// dashboard: idle = nog niet begonnen, accent = actief werk, warn = wacht op
+// oppak-actie, good = klaar) -- niet zomaar 4 willekeurige tinten.
+const TASK_COLOR: Record<TaskStatus, string> = { todo: "var(--idle)", in_progress: "var(--accent)", handed_off: "var(--warn)", done: "var(--good)" };
+const PEOPLE_NAME: Record<string, string> = Object.fromEntries(ALL_PEOPLE.map((p) => [p.id, p.name]));
 const METRIC_LABELS: Record<string, string> = {
   outreach_contacted: "Outreach — contacted",
   outreach_replies: "Outreach — replies",
@@ -57,8 +71,10 @@ function isoWeek(d: Date) {
 }
 
 export default function Dashboard(props: {
+  initialMe: string | null;
   initialCrew: Crew[]; initialVentures: Venture[]; initialCommits: CommitRow[];
   initialDirectives: Directive[]; initialCrewEvents: CrewEvent[]; initialMetrics: Metric[]; initialPayouts: Payout[];
+  initialTasks: Task[];
 }) {
   const [crew, setCrew] = useState(props.initialCrew);
   const [ventures, setVentures] = useState(props.initialVentures);
@@ -67,7 +83,11 @@ export default function Dashboard(props: {
   const [crewEvents, setCrewEvents] = useState(props.initialCrewEvents);
   const [metrics, setMetrics] = useState(props.initialMetrics);
   const [payouts, setPayouts] = useState(props.initialPayouts);
-  const [me, setMe] = useState("");
+  const [tasks, setTasks] = useState(props.initialTasks);
+  // Server-geverifieerd (flowsys_identity-cookie) -- geen los te kiezen dropdown
+  // meer. Kan alleen veranderen via een echte login, dus geen state nodig.
+  const me = props.initialMe ?? "";
+  const meName = PEOPLE_NAME[me] ?? me;
   const [now, setNow] = useState(Date.now());
   const [selectedVentureId, setSelectedVentureId] = useState<string | null>(null);
 
@@ -75,11 +95,12 @@ export default function Dashboard(props: {
   const [editMrrVentureId, setEditMrrVentureId] = useState<string | null>(null);
   const [openVentureId, setOpenVentureId] = useState<string | null>(null);
   const [editVentureId, setEditVentureId] = useState<string | null>(null);
+  const [openTaskId, setOpenTaskId] = useState<number | null>(null);
+  const [editTaskId, setEditTaskId] = useState<number | null>(null);
   const [directiveText, setDirectiveText] = useState("");
   const [syncingMrr, setSyncingMrr] = useState(false);
 
   useEffect(() => {
-    try { setMe(localStorage.getItem("flowsys_me") || ""); } catch {}
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
@@ -93,6 +114,7 @@ export default function Dashboard(props: {
       crew_events: () => supabaseBrowser.from("crew_events").select("*").order("ts", { ascending: false }).limit(200).then(({ data }) => data && setCrewEvents(data as CrewEvent[])),
       metrics: () => supabaseBrowser.from("metrics").select("*").order("created_at", { ascending: false }).limit(100).then(({ data }) => data && setMetrics(data as Metric[])),
       payouts: () => supabaseBrowser.from("payouts").select("*").order("paid_at", { ascending: false }).limit(50).then(({ data }) => data && setPayouts(data as Payout[])),
+      tasks: () => supabaseBrowser.from("tasks").select("*").order("created_at", { ascending: false }).limit(200).then(({ data }) => data && setTasks(data as Task[])),
     };
     const channel = supabaseBrowser
       .channel("flowsys-dashboard")
@@ -103,18 +125,11 @@ export default function Dashboard(props: {
       .on("postgres_changes", { event: "*", schema: "public", table: "crew_events" }, refetch.crew_events)
       .on("postgres_changes", { event: "*", schema: "public", table: "metrics" }, refetch.metrics)
       .on("postgres_changes", { event: "*", schema: "public", table: "payouts" }, refetch.payouts)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, refetch.tasks)
       .subscribe();
     return () => { supabaseBrowser.removeChannel(channel); };
   }, []);
 
-  function pickMe(name: string) {
-    setMe(name);
-    try { localStorage.setItem("flowsys_me", name); } catch {}
-  }
-  function needsIdentity() {
-    if (!me) { window.alert("Kies eerst je naam rechtsboven, zodat wijzigingen toe te wijzen zijn."); return true; }
-    return false;
-  }
   async function post(url: string, body: unknown) {
     const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) window.alert("Opslaan mislukt — probeer opnieuw.");
@@ -151,25 +166,23 @@ export default function Dashboard(props: {
   }
 
   const visibleCommits = (selectedVentureId ? commits.filter((c) => c.venture_id === selectedVentureId) : commits).slice(0, 6);
+  const visibleTasks = selectedVentureId ? tasks.filter((t) => t.venture_id === selectedVentureId) : tasks;
+  const myOpenTasks = tasks.filter((t) => t.assigned_to === me && t.status !== "done");
 
   async function saveCrew(c: Crew, status: CrewStatus, task: string, note: string, ventureId: string | null) {
-    if (needsIdentity()) return;
     await post("/api/crew", { id: c.id, status, task, note, current_venture_id: ventureId });
     setEditCrewId(null);
   }
   async function saveMrr(ventureId: string, val: number) {
-    if (needsIdentity()) return;
     await post("/api/venture", { id: ventureId, mrr: val });
     setEditMrrVentureId(null);
   }
   async function resetSprint() {
-    if (needsIdentity()) return;
     const v = clockVenture;
     if (!v) { window.alert("Selecteer eerst een venture."); return; }
     await post("/api/venture", { id: v.id, resetSprintHours: 72, sprintLabel: v.sprint_label || v.name });
   }
   async function saveVenture(v: Venture, patch: Partial<Venture>) {
-    if (needsIdentity()) return;
     await post("/api/venture", { id: v.id, ...patch });
     setEditVentureId(null);
   }
@@ -179,11 +192,18 @@ export default function Dashboard(props: {
     setSyncingMrr(false);
   }
   async function deploy() {
-    if (needsIdentity()) return;
     const text = directiveText.trim();
     if (!text) return;
-    await post("/api/directive", { author: me, text, venture_id: selectedVentureId });
+    await post("/api/directive", { author: meName, text, venture_id: selectedVentureId });
     setDirectiveText("");
+  }
+  async function createTask(body: { venture_id: string; title: string; description: string; assigned_to: string }) {
+    const ok = await post("/api/tasks", body);
+    return ok;
+  }
+  async function saveTask(t: Task, patch: { title?: string; description?: string; status?: TaskStatus; assigned_to?: string }) {
+    await post(`/api/tasks/${t.id}`, patch);
+    setEditTaskId(null);
   }
 
   return (
@@ -192,12 +212,7 @@ export default function Dashboard(props: {
         <div className="brand"><span className="brand-mark">FLOW SYSTEMS</span><span className="brand-sub">// Command Center</span></div>
         <div className="topbar-right">
           <span className="status-pulse"><span className="dot" /> Live</span>
-          <span className="identity">Ingelogd als
-            <select value={me} onChange={(e) => pickMe(e.target.value)}>
-              <option value="">Kies je naam…</option>
-              {PEOPLE.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </span>
+          <span className="identity">Ingelogd als <b>{meName}</b></span>
           <button className="btn ghost" onClick={logout}>Uitloggen</button>
         </div>
       </div>
@@ -364,8 +379,62 @@ export default function Dashboard(props: {
         </div>
       </div>
 
+      {/* TAKEN */}
+      <div className="section-head"><span className="section-num">04</span><span className="section-title">Taken{selectedVenture ? ` — ${selectedVenture.name}` : ""}</span><span className="section-line" /></div>
+      <p className="section-sub">Wat moet er nog gebeuren, en van wie naar wie</p>
+
+      {myOpenTasks.length > 0 ? (
+        <div className="for-you">
+          <div className="for-you-head">Voor jou <span className="for-you-count">{myOpenTasks.length}</span></div>
+          {myOpenTasks.map((t) => (
+            <div className="for-you-line" key={t.id}>
+              <span><span className="venture">{ventureName(t.venture_id)}</span>{t.title}</span>
+              <span className={"tag " + TASK_STATUS_TAG[t.status]}>{TASK_STATUS_LABEL[t.status]}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="for-you empty">Niks voor jou openstaand — mooi zo.</div>
+      )}
+
+      <div className="pipeline cols-4">
+        {TASK_STATUSES.map((stage, idx) => (
+          <div key={stage}>
+            <div className="col-head"><b style={{ color: TASK_COLOR[stage] }}>{pad(idx + 1)}</b> {TASK_STATUS_LABEL[stage]}</div>
+            <div className="col-body">
+              {visibleTasks.filter((t) => t.status === stage).map((t) => (
+                <div className="app-card" style={{ borderLeft: `3px solid ${TASK_COLOR[t.status]}` }} key={t.id}>
+                  <div className="app-head" onClick={() => setOpenTaskId(openTaskId === t.id ? null : t.id)}>
+                    <span className="app-name-row">
+                      <span className="app-name">{t.title}</span>
+                      {!selectedVenture && <span className="task-venture-badge">{ventureName(t.venture_id)}</span>}
+                    </span>
+                    <span className={"chev" + (openTaskId === t.id ? " open" : "")}>⌄</span>
+                  </div>
+                  {openTaskId === t.id && (
+                    editTaskId === t.id ? (
+                      <TaskForm task={t} crew={crew} onCancel={() => setEditTaskId(null)} onSave={(patch) => saveTask(t, patch)} />
+                    ) : (
+                      <div className="detail-inner">
+                        {t.description && <div className="task-desc">{t.description}</div>}
+                        <div className="detail-row"><span>Toegewezen aan</span><span>{crew.find((c) => c.id === t.assigned_to)?.name ?? t.assigned_to}</span></div>
+                        <div className="detail-row"><span>Aangemaakt door</span><span>{PEOPLE_NAME[t.created_by] ?? t.created_by}</span></div>
+                        {t.handed_off_by && <div className="detail-row"><span>Laatst doorgestuurd door</span><span>{crew.find((c) => c.id === t.handed_off_by)?.name ?? t.handed_off_by} · {relTime(t.handed_off_at)}</span></div>}
+                        <div className="edit-actions" style={{ marginTop: 10 }}><button className="btn" onClick={() => setEditTaskId(t.id)}>Bewerken / doorsturen</button></div>
+                      </div>
+                    )
+                  )}
+                </div>
+              ))}
+              {visibleTasks.filter((t) => t.status === stage).length === 0 && <div className="col-empty">—</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+      <TaskCreateForm crew={crew} ventures={ventures} defaultVentureId={selectedVentureId} onSubmit={createTask} />
+
       {/* PRESTATIES */}
-      <div className="section-head"><span className="section-num">04</span><span className="section-title">Prestaties</span><span className="section-line" /></div>
+      <div className="section-head"><span className="section-num">05</span><span className="section-title">Prestaties</span><span className="section-line" /></div>
       <p className="section-sub">Commits uit Git zijn automatisch; outreach/scouting log je handmatig hieronder</p>
       <div className="perf-grid">
         {crew.map((c) => {
@@ -390,10 +459,10 @@ export default function Dashboard(props: {
           );
         })}
       </div>
-      <MetricForm crew={crew} ventures={ventures} me={me} defaultPeriod={isoWeek(new Date())} onNeedsIdentity={needsIdentity} onSubmit={(body) => post("/api/metrics", body)} />
+      <MetricForm crew={crew} ventures={ventures} defaultPeriod={isoWeek(new Date())} onSubmit={(body) => post("/api/metrics", body)} />
 
       {/* UITBETALINGEN */}
-      <div className="section-head"><span className="section-num">05</span><span className="section-title">Uitbetalingen</span><span className="section-line" /></div>
+      <div className="section-head"><span className="section-num">06</span><span className="section-title">Uitbetalingen</span><span className="section-line" /></div>
       <p className="section-sub">Alleen een overzicht — dit voert nooit zelf een betaling uit, jij betaalt en logt het hier</p>
       <div className="ledger-wrap">
         <table className="ledger-table">
@@ -424,15 +493,15 @@ export default function Dashboard(props: {
             <span className="gl-pass">door {p.recorded_by}</span>
           </div>
         ))}
-        <PayoutForm crew={crew} ventures={ventures} me={me} onNeedsIdentity={needsIdentity} onSubmit={(body) => post("/api/payouts", body)} />
+        <PayoutForm crew={crew} ventures={ventures} me={meName} onSubmit={(body) => post("/api/payouts", body)} />
       </div>
 
       {/* CONSOLE */}
-      <div className="section-head"><span className="section-num">06</span><span className="section-title">VETO Console</span><span className="section-line" /></div>
+      <div className="section-head"><span className="section-num">07</span><span className="section-title">VETO Console</span><span className="section-line" /></div>
       <p className="section-sub">Matthias — rank 1, veto-macht{selectedVenture ? ` — gericht op ${selectedVenture.name}` : " — algemeen"}</p>
       <div className="console">
         <div className="console-row">
-          <span className="prompt-prefix">{(me || "GAST").toUpperCase()}@FLOWSYS:~$</span>
+          <span className="prompt-prefix">{meName.toUpperCase()}@FLOWSYS:~$</span>
           <input
             className="console-input"
             placeholder="Initeer override, VETO, of forceer [PASS] commando..."
@@ -534,9 +603,67 @@ function VentureForm({ venture, crew, onCancel, onSave }: { venture: Venture; cr
   );
 }
 
-function MetricForm({ crew, ventures, me, defaultPeriod, onNeedsIdentity, onSubmit }: {
-  crew: Crew[]; ventures: Venture[]; me: string; defaultPeriod: string;
-  onNeedsIdentity: () => boolean; onSubmit: (body: unknown) => Promise<boolean>;
+function TaskForm({ task, crew, onCancel, onSave }: {
+  task: Task; crew: Crew[]; onCancel: () => void;
+  onSave: (patch: { title?: string; description?: string; status?: TaskStatus; assigned_to?: string }) => void;
+}) {
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description);
+  const [status, setStatus] = useState<TaskStatus>(task.status);
+  const [assignedTo, setAssignedTo] = useState(task.assigned_to);
+  return (
+    <div className="edit-form">
+      <div><label>Titel</label><input className="field" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
+      <div><label>Omschrijving</label><input className="field" value={description} onChange={(e) => setDescription(e.target.value)} /></div>
+      <div><label>Status</label>
+        <select value={status} onChange={(e) => setStatus(e.target.value as TaskStatus)}>
+          {TASK_STATUSES.map((s) => <option key={s} value={s}>{TASK_STATUS_LABEL[s]}</option>)}
+        </select>
+      </div>
+      <div><label>Toegewezen aan — kiezen = doorsturen</label>
+        <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
+          {crew.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </div>
+      <div className="edit-actions">
+        <button className="btn primary" onClick={() => onSave({ title, description, status, assigned_to: assignedTo })}>Opslaan</button>
+        <button className="btn ghost" onClick={onCancel}>Annuleren</button>
+      </div>
+    </div>
+  );
+}
+
+function TaskCreateForm({ crew, ventures, defaultVentureId, onSubmit }: {
+  crew: Crew[]; ventures: Venture[]; defaultVentureId: string | null;
+  onSubmit: (body: { venture_id: string; title: string; description: string; assigned_to: string }) => Promise<boolean>;
+}) {
+  const [ventureId, setVentureId] = useState(defaultVentureId ?? ventures[0]?.id ?? "");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [assignedTo, setAssignedTo] = useState(crew[0]?.id ?? "");
+
+  useEffect(() => { if (defaultVentureId) setVentureId(defaultVentureId); }, [defaultVentureId]);
+
+  async function submit() {
+    if (!title.trim()) return;
+    const ok = await onSubmit({ venture_id: ventureId, title: title.trim(), description, assigned_to: assignedTo });
+    if (ok) { setTitle(""); setDescription(""); }
+  }
+
+  return (
+    <div className="form-inline">
+      <select value={ventureId} onChange={(e) => setVentureId(e.target.value)}>{ventures.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select>
+      <input className="field" placeholder="Titel van de taak" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <input className="field" placeholder="omschrijving (optioneel)" value={description} onChange={(e) => setDescription(e.target.value)} />
+      <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>{crew.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+      <button className="btn primary" onClick={submit}>+ Taak aanmaken</button>
+    </div>
+  );
+}
+
+function MetricForm({ crew, ventures, defaultPeriod, onSubmit }: {
+  crew: Crew[]; ventures: Venture[]; defaultPeriod: string;
+  onSubmit: (body: unknown) => Promise<boolean>;
 }) {
   const [crewId, setCrewId] = useState(crew[0]?.id ?? "");
   const [label, setLabel] = useState("outreach_contacted");
@@ -546,7 +673,6 @@ function MetricForm({ crew, ventures, me, defaultPeriod, onNeedsIdentity, onSubm
   const [note, setNote] = useState("");
 
   async function submit() {
-    if (onNeedsIdentity()) return;
     const ok = await onSubmit({ crew_id: crewId, venture_id: ventureId || null, label, value, period, note: note || null });
     if (ok) { setValue(0); setNote(""); }
   }
@@ -564,8 +690,8 @@ function MetricForm({ crew, ventures, me, defaultPeriod, onNeedsIdentity, onSubm
   );
 }
 
-function PayoutForm({ crew, ventures, me, onNeedsIdentity, onSubmit }: {
-  crew: Crew[]; ventures: Venture[]; me: string; onNeedsIdentity: () => boolean; onSubmit: (body: unknown) => Promise<boolean>;
+function PayoutForm({ crew, ventures, me, onSubmit }: {
+  crew: Crew[]; ventures: Venture[]; me: string; onSubmit: (body: unknown) => Promise<boolean>;
 }) {
   const [crewId, setCrewId] = useState("zende");
   const [ventureId, setVentureId] = useState("");
@@ -573,7 +699,6 @@ function PayoutForm({ crew, ventures, me, onNeedsIdentity, onSubmit }: {
   const [note, setNote] = useState("");
 
   async function submit() {
-    if (onNeedsIdentity()) return;
     if (!amount || amount <= 0) { window.alert("Vul een bedrag > 0 in."); return; }
     const ok = await onSubmit({ crew_id: crewId, venture_id: ventureId || null, amount, note: note || null, recorded_by: me });
     if (ok) { setAmount(0); setNote(""); }

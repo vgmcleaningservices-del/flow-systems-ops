@@ -99,6 +99,22 @@ create table if not exists payouts (
   recorded_by text not null
 );
 
+-- Per-venture taken-/tickerbord met een expliciete doorstuur-actie ("hand-off").
+create table if not exists tasks (
+  id bigint generated always as identity primary key,
+  venture_id text not null references ventures(id),
+  title text not null,
+  description text not null default '',
+  status text not null default 'todo',        -- todo | in_progress | handed_off | done
+  created_by text not null,                   -- vrije tekst zoals directives.author -- ook Matthias mag
+                                               -- een taak loggen, en die is (bewust) geen crew-rij
+  assigned_to text not null references crew(id), -- van wie de "voor jou"-lijst dit is
+  handed_off_by text references crew(id),     -- wie de laatste keer heeft doorgestuurd
+  handed_off_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 -- seed data — edit freely afterwards from the dashboard or the Supabase table editor.
 -- Order matters: crew and ventures reference each other (pitched_by / current_venture_id),
 -- so insert both without their cross-reference first, then backfill with UPDATEs —
@@ -128,6 +144,7 @@ alter table directives enable row level security;
 alter table crew_events enable row level security;
 alter table metrics enable row level security;
 alter table payouts enable row level security;
+alter table tasks enable row level security;
 
 create policy "public read crew" on crew for select using (true);
 create policy "public read ventures" on ventures for select using (true);
@@ -136,6 +153,7 @@ create policy "public read directives" on directives for select using (true);
 create policy "public read crew_events" on crew_events for select using (true);
 create policy "public read metrics" on metrics for select using (true);
 create policy "public read payouts" on payouts for select using (true);
+create policy "public read tasks" on tasks for select using (true);
 
 -- Realtime: let the dashboard subscribe to live changes instead of polling.
 alter publication supabase_realtime add table crew;
@@ -144,3 +162,4 @@ alter publication supabase_realtime add table commits;
 alter publication supabase_realtime add table directives;
 alter publication supabase_realtime add table metrics;
 alter publication supabase_realtime add table payouts;
+alter publication supabase_realtime add table tasks;

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { COOKIE_NAME, isValidSessionToken } from "./lib/session";
+import { COOKIE_NAME, IDENTITY_COOKIE_NAME, isValidSessionToken, verifyIdentityToken } from "./lib/session";
 
 const PUBLIC_PATHS = ["/login", "/api/auth", "/api/github-webhook", "/api/mrr-sync"];
 
@@ -10,7 +10,10 @@ export async function middleware(req: NextRequest) {
   }
 
   const token = req.cookies.get(COOKIE_NAME)?.value;
-  if (await isValidSessionToken(token)) return NextResponse.next();
+  const identityToken = req.cookies.get(IDENTITY_COOKIE_NAME)?.value;
+  const validTeam = await isValidSessionToken(token);
+  const crewId = validTeam ? await verifyIdentityToken(identityToken) : null;
+  if (validTeam && crewId) return NextResponse.next();
 
   if (pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

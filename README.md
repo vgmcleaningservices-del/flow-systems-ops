@@ -120,18 +120,23 @@ bewerkbaar in het dashboard zelf, met dezelfde knoppen als voorheen.
   Dit is de "in 5 seconden zien of alles oké is"-laag.
 - **02 · Squad** — elke persoon toont nu ook **"Bezig aan: ‹venture›"**, bijgewerkt door
   de webhook of handmatig via Bewerken.
-- **04 · Prestaties** — per persoon: commits van de laatste 7 dagen (automatisch uit
+- **04 · Taken** — een taken-/tickerbord per venture (te doen → bezig → doorgegeven →
+  klaar). Bovenaan een "Voor jou"-lijstje met alles wat op jouw naam staat. Een taak
+  doorsturen naar iemand anders = 'm openklappen, Bewerken, een andere naam kiezen bij
+  "Toegewezen aan", opslaan — dat is de hand-off, geen aparte knop. Wie iets doorstuurt
+  komt uit de echte login, niet uit een vrij te kiezen naam.
+- **05 · Prestaties** — per persoon: commits van de laatste 7 dagen (automatisch uit
   Git) en aantal keer dat ze een PASS ontvingen (= de bal kregen toegespeeld). Voor
   werk dat niet in Git zit (Runar's outreach-cijfers, Zende's scouting) staat er een
   logformulier onderaan — kies persoon, type metric, waarde, week, en het verschijnt
   meteen op hun kaart.
-- **05 · Uitbetalingen** — een reken-tabel, geen betaalknop: per venture MRR, wie het
+- **06 · Uitbetalingen** — een reken-tabel, geen betaalknop: per venture MRR, wie het
   pitchte, en (als dat Zende was) zijn 5%-royalty vs. het House-aandeel — rechtstreeks
   uit de regel in [Equity-Agreements.md](../00-Flow-Systems-HQ/Team/Equity-Agreements.md).
   Daaronder een logboek van wat je *echt* al hebt uitbetaald (handmatig ingevoerd) —
   zo zie je in één oogopslag verschuldigd vs. betaald, zonder dat de app ooit zelf geld
   verplaatst.
-- **06 · VETO Console** — ongewijzigd, met één toevoeging: als je een venture hebt
+- **07 · VETO Console** — ongewijzigd, met één toevoeging: als je een venture hebt
   geselecteerd in laag 00, wordt de directive daaraan gekoppeld.
 
 ## Lokaal ontwikkelen (optioneel)
@@ -147,9 +152,13 @@ npm run dev
 
 ## Eerlijkheid over de scope
 
-- **Login is één gedeelde teamcode**, geen individuele accounts. Prima voor een team
-  van vier-vijf mensen die elkaar vertrouwen; niet iets om uit te breiden naar klanten
-  of externe partijen zonder een echt auth-systeem (bv. Supabase Auth met magic links).
+- **Login is de gedeelde teamcode + een persoonlijke code per persoon** (`CREW_CODE_*`).
+  De teamcode blijft de buitenste poort; de persoonlijke code legt vast wie iemand
+  écht is, zodat taken-doorsturen niet meer op een vrij te kiezen naam vertrouwt
+  zoals voorheen. Nog steeds hand-rolled (HMAC-cookies, geen wachtwoord-hashing) —
+  prima voor vier-vijf mensen die elkaar vertrouwen, niet iets om uit te breiden
+  naar klanten of externe partijen zonder een echt auth-systeem (bv. Supabase Auth
+  met magic links).
 - **RLS staat op "iedereen met de anon-key mag lezen."** Schrijven kan alleen via de
   API-routes met de service-role key, die achter de teamcode-cookie zitten. Voor
   interne bedrijfscijfers is dat een redelijke afweging; het is geen bank-grade setup.
