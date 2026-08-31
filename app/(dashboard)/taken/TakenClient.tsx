@@ -150,9 +150,10 @@ export function TakenClient(props: { initialMe: string; initialTasks: Task[]; in
                             <button className="btn" onClick={() => addSubtask(t)}>+</button>
                           </div>
                         </div>
-                        <div className="edit-actions" style={{ marginTop: 10 }}>
+                        <div className="edit-actions" style={{ marginTop: 10, alignItems: "center" }}>
                           {NEXT_STEP[t.status] && <button className="btn primary" onClick={() => quickAdvance(t, NEXT_STEP[t.status]!.status)}>{NEXT_STEP[t.status]!.label}</button>}
                           <button className="btn ghost" onClick={() => setEditTaskId(t.id)}>Bewerken / doorsturen</button>
+                          <span className="task-assignee-badge">{crew.find((c) => c.id === t.assigned_to)?.name ?? t.assigned_to}</span>
                         </div>
                       </div>
                     )}
