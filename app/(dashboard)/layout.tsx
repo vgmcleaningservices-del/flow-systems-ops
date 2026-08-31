@@ -17,10 +17,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <Sidebar isMatthias={matthias} />
       <div className="app-main">
         <div className="topbar">
-          <div className="brand"><span className="brand-mark">FLOW SYSTEMS</span><span className="brand-sub">// Command Center</span></div>
+          <div className="brand">
+            <span className="brand-badge">FS</span>
+            <span className="brand-text"><span className="brand-mark">FLOW SYSTEMS</span><span className="brand-sub">// Command Center</span></span>
+          </div>
           <div className="topbar-right">
             <span className="status-pulse"><span className="dot" /> Live</span>
-            <span className="identity">Ingelogd als <b>{meName}</b></span>
+            <span className="topbar-divider" />
+            <span className="identity">
+              <span className="avatar">{meName ? meName[0].toUpperCase() : "?"}</span>
+              Ingelogd als <b>{meName}</b>
+            </span>
             <LogoutButton />
           </div>
         </div>
