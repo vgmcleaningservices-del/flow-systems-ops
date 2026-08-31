@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
+import * as motion from "motion/react-client";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { post } from "@/lib/api-client";
 import type { Venture, WikiPage } from "@/lib/dashboard-types";
 import { PEOPLE_NAME } from "@/lib/dashboard-constants";
 import { relTime, renderWikiContent } from "@/lib/dashboard-format";
+import { AnimatedDisclosure, staggerContainerVariants, staggerItemVariants } from "../_components/motion";
 import { WikiPageForm } from "./WikiPageForm";
 import { WikiCreateForm } from "./WikiCreateForm";
 
@@ -42,9 +44,9 @@ export function WikiClient(props: { initialMe: string; initialWikiPages: WikiPag
     <>
       <div className="section-head"><span className="section-title">Wiki</span></div>
       <p className="section-sub">Gedeelde kennisbank — algemene pagina&apos;s of per venture</p>
-      <div className="col-body">
+      <motion.div className="col-body" variants={staggerContainerVariants} initial="hidden" animate="show">
         {wikiPages.map((w) => (
-          <div className="app-card" key={w.id}>
+          <motion.div className="app-card" key={w.id} variants={staggerItemVariants}>
             <div className="app-head" onClick={() => setOpenWikiId(openWikiId === w.id ? null : w.id)}>
               <span className="app-name-row">
                 <span className="app-name">{w.title}</span>
@@ -52,8 +54,8 @@ export function WikiClient(props: { initialMe: string; initialWikiPages: WikiPag
               </span>
               <span className={"chev" + (openWikiId === w.id ? " open" : "")}>⌄</span>
             </div>
-            {openWikiId === w.id && (
-              editWikiId === w.id ? (
+            <AnimatedDisclosure open={openWikiId === w.id}>
+              {editWikiId === w.id ? (
                 <WikiPageForm page={w} ventures={ventures} onCancel={() => setEditWikiId(null)} onSave={(patch) => saveWiki(w, patch)} />
               ) : (
                 <div className="detail-inner">
@@ -64,12 +66,12 @@ export function WikiClient(props: { initialMe: string; initialWikiPages: WikiPag
                     <button className="btn ghost" onClick={() => deleteWiki(w)}>Verwijderen</button>
                   </div>
                 </div>
-              )
-            )}
-          </div>
+              )}
+            </AnimatedDisclosure>
+          </motion.div>
         ))}
         {wikiPages.length === 0 && <div className="col-empty">Nog geen pagina&apos;s.</div>}
-      </div>
+      </motion.div>
       <WikiCreateForm ventures={ventures} onSubmit={createWiki} />
     </>
   );
