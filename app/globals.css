@@ -34,6 +34,12 @@
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
+  /* Decoratieve achtergrondlaag (AmbientBackground) -- licht: de ringen tinten
+     in het bijna-witte oppervlak via multiply, dus lage opacity volstaat. */
+  --ambient-line: 211, 100%, 45%;
+  --ambient-opacity: 0.12;
+  --ambient-blend: multiply;
+
   /* Type scale -- consolidates ~8 ad-hoc font-sizes used throughout this file. */
   --text-2xs: 11px;
   --text-xs: 12px;
@@ -84,6 +90,11 @@
     --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.5);
     --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.45), 0 20px 40px rgba(0, 0, 0, 0.55);
     --nav-bg: rgba(28, 28, 30, 0.72);
+    /* --bg is puur zwart hier -- dezelfde ring leest bij gelijke opacity veel
+       feller, dus lager + screen i.p.v. multiply voor een gloed-op-zwart. */
+    --ambient-line: 211, 100%, 65%;
+    --ambient-opacity: 0.18;
+    --ambient-blend: screen;
   }
 }
 
@@ -116,6 +127,9 @@
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.5);
   --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.45), 0 20px 40px rgba(0, 0, 0, 0.55);
   --nav-bg: rgba(28, 28, 30, 0.72);
+  --ambient-line: 211, 100%, 65%;
+  --ambient-opacity: 0.18;
+  --ambient-blend: screen;
 }
 
 * { box-sizing: border-box; }
@@ -203,7 +217,17 @@ a { color: inherit; }
 }
 
 /* ---------- app shell: sidebar (desktop) + drawer (mobile) ---------- */
-.app-shell { display: flex; gap: 24px; align-items: flex-start; }
+/* position:relative + z-index geven de content een eigen stacking context
+   boven de fixed .ambient-bg (z-index:0), zonder de bestaande z-index:30
+   van .topbar te hoeven aanraken -- die blijft gewoon binnen deze context werken. */
+.app-shell { display: flex; gap: 24px; align-items: flex-start; position: relative; z-index: 1; }
+
+/* ---------- ambient background (decoratief, dashboard-breed) ---------- */
+.ambient-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; mix-blend-mode: var(--ambient-blend); }
+.ambient-ring { position: absolute; border-radius: 50%; border: 1px solid hsla(var(--ambient-line), var(--ambient-opacity)); will-change: transform; }
+.ambient-ring-1 { width: 70vmax; height: 70vmax; top: -20%; right: -15%; }
+.ambient-ring-2 { width: 50vmax; height: 50vmax; top: -10%; right: -8%; }
+.ambient-ring-3 { width: 32vmax; height: 32vmax; top: -2%; right: 0%; }
 .sidebar {
   width: 220px; flex-shrink: 0; position: sticky; top: 20px;
   display: flex; flex-direction: column; gap: 4px; background: var(--surface);
