@@ -19,6 +19,7 @@ export interface Directive { id: number; venture_id: string | null; author: stri
 export interface CrewEvent { id: number; crew_id: string; venture_id: string | null; from_status: string | null; to_status: string; source: string; ts: string; }
 export interface Metric { id: number; crew_id: string; venture_id: string | null; label: string; value: number; period: string; note: string | null; created_at: string; }
 export interface Payout { id: number; crew_id: string; venture_id: string | null; amount: number; note: string | null; paid_at: string; recorded_by: string; }
+export interface CommitSummary { id: number; venture_id: string | null; summary: string; commit_count: number; created_at: string; }
 export type TaskPriority = "low" | "normal" | "high" | "urgent";
 export interface Task {
   id: number; venture_id: string; title: string; description: string; status: TaskStatus;

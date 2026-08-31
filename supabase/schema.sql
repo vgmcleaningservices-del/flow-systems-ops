@@ -151,6 +151,18 @@ create table if not exists wiki_pages (
   updated_at timestamptz not null default now()
 );
 
+-- Plain-language (jip-en-janneke) samenvatting van git-activiteit, één rij per
+-- push-webhook-event, gevuld door de Claude API (best-effort -- als die call
+-- faalt slaat de webhook deze rij gewoon over, de ruwe commits blijven altijd
+-- wel gelogd in `commits`).
+create table if not exists commit_summaries (
+  id bigint generated always as identity primary key,
+  venture_id text references ventures(id),
+  summary text not null,
+  commit_count int not null default 0,
+  created_at timestamptz not null default now()
+);
+
 -- seed data — edit freely afterwards from the dashboard or the Supabase table editor.
 -- Order matters: crew and ventures reference each other (pitched_by / current_venture_id),
 -- so insert both without their cross-reference first, then backfill with UPDATEs —
@@ -183,6 +195,7 @@ alter table payouts enable row level security;
 alter table tasks enable row level security;
 alter table tools enable row level security;
 alter table wiki_pages enable row level security;
+alter table commit_summaries enable row level security;
 
 create policy "public read crew" on crew for select using (true);
 create policy "public read ventures" on ventures for select using (true);
@@ -194,6 +207,7 @@ create policy "public read payouts" on payouts for select using (true);
 create policy "public read tasks" on tasks for select using (true);
 create policy "public read tools" on tools for select using (true);
 create policy "public read wiki_pages" on wiki_pages for select using (true);
+create policy "public read commit_summaries" on commit_summaries for select using (true);
 
 -- Realtime: let the dashboard subscribe to live changes instead of polling.
 alter publication supabase_realtime add table crew;
@@ -205,3 +219,4 @@ alter publication supabase_realtime add table payouts;
 alter publication supabase_realtime add table tools;
 alter publication supabase_realtime add table wiki_pages;
 alter publication supabase_realtime add table tasks;
+alter publication supabase_realtime add table commit_summaries;

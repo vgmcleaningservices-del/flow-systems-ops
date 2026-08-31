@@ -5,10 +5,16 @@ export const dynamic = "force-dynamic";
 
 export default async function SquadPage() {
   const db = supabaseAdmin();
-  const [{ data: crew }, { data: ventures }, { data: commits }] = await Promise.all([
+  const [{ data: crew }, { data: ventures }, { data: commits }, { data: commitSummaries }] = await Promise.all([
     db.from("crew").select("*").order("rank", { ascending: true }),
     db.from("ventures").select("*"),
     db.from("commits").select("*").order("ts", { ascending: false }).limit(200),
+    db.from("commit_summaries").select("*").order("created_at", { ascending: false }).limit(20),
   ]);
-  return <SquadClient initialCrew={crew ?? []} initialVentures={ventures ?? []} initialCommits={commits ?? []} />;
+  return (
+    <SquadClient
+      initialCrew={crew ?? []} initialVentures={ventures ?? []} initialCommits={commits ?? []}
+      initialCommitSummaries={commitSummaries ?? []}
+    />
+  );
 }

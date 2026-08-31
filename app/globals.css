@@ -379,6 +379,9 @@ svg.icon { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-w
 .gitlog-line .gl-time { color: var(--text-faint); flex-shrink: 0; }
 .gitlog-line .gl-pass { color: var(--accent); margin-left: auto; flex-shrink: 0; }
 .gitlog-empty { font-size: 12.5px; color: var(--text-faint); font-style: italic; }
+.gitlog-summary { display: flex; gap: 8px; align-items: flex-start; background: var(--accent-dim); border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.45; }
+.gitlog-summary-icon { flex-shrink: 0; }
+.gitlog-summary-time { display: block; font-size: 11px; color: var(--text-faint); margin-top: 3px; }
 
 /* ---------- pipeline ---------- */
 .pipeline { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }

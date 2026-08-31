@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabaseServer";
+import { summarizeCommitsPlainDutch } from "@/lib/git-summary";
 
 const PASS_RE = /\[PASS:([A-Z0-9_]+)\]/i;
 
@@ -60,6 +61,8 @@ export async function POST(req: NextRequest) {
     await db.from("crew_events").insert({ crew_id: crewId, venture_id: ventureId, from_status: fromStatus, to_status: toStatus, source: "webhook" });
   }
 
+  const summaryInput: { message: string; author: string; passTo: string | null }[] = [];
+
   for (const commit of commits) {
     const message: string = commit.message || "";
     const match = message.match(PASS_RE);
@@ -69,6 +72,7 @@ export async function POST(req: NextRequest) {
     const ts = commit.timestamp || new Date().toISOString();
     const pusher = findByAuthor(authorLogin, authorName);
     const target = passTo ? findByPassTarget(passTo) : undefined;
+    summaryInput.push({ message, author: pusher?.name ?? authorName, passTo: target?.name ?? passTo });
 
     await db.from("commits").insert({ repo, venture_id: ventureId, crew_id: pusher?.id ?? null, sha: commit.id, message, author: authorName, pass_to: passTo, ts });
 
@@ -103,6 +107,11 @@ export async function POST(req: NextRequest) {
         .eq("id", pusher.id);
       await logEvent(pusher.id, pusher.status, "active");
     }
+  }
+
+  const summary = await summarizeCommitsPlainDutch(venture?.name ?? null, summaryInput);
+  if (summary) {
+    await db.from("commit_summaries").insert({ venture_id: ventureId, summary, commit_count: commits.length });
   }
 
   return NextResponse.json({ ok: true, processed: commits.length, venture: ventureId });

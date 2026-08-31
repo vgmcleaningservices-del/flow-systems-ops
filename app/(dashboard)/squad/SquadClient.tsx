@@ -3,15 +3,17 @@ import { useEffect, useState } from "react";
 import * as motion from "motion/react-client";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { post } from "@/lib/api-client";
-import type { Crew, CrewStatus, CommitRow, Venture } from "@/lib/dashboard-types";
+import type { Crew, CrewStatus, CommitRow, CommitSummary, Venture } from "@/lib/dashboard-types";
 import { STATUS_LABEL, STATUS_TAG } from "@/lib/dashboard-constants";
+import { relTime } from "@/lib/dashboard-format";
 import { staggerContainerVariants, staggerItemVariants, TiltCard } from "../_components/motion";
 import { CrewForm } from "./CrewForm";
 
-export function SquadClient(props: { initialCrew: Crew[]; initialVentures: Venture[]; initialCommits: CommitRow[] }) {
+export function SquadClient(props: { initialCrew: Crew[]; initialVentures: Venture[]; initialCommits: CommitRow[]; initialCommitSummaries: CommitSummary[] }) {
   const [crew, setCrew] = useState(props.initialCrew);
   const [ventures, setVentures] = useState(props.initialVentures);
   const [commits, setCommits] = useState(props.initialCommits);
+  const [commitSummaries, setCommitSummaries] = useState(props.initialCommitSummaries);
   const [editCrewId, setEditCrewId] = useState<string | null>(null);
   // Lokaal aan deze pagina -- de oude paginabrede venture-selector filterde
   // hier ook alleen de git-log, dus dat gedrag blijft behouden, alleen nu
@@ -22,11 +24,13 @@ export function SquadClient(props: { initialCrew: Crew[]; initialVentures: Ventu
     const refetchCrew = () => supabaseBrowser.from("crew").select("*").order("rank").then(({ data }) => data && setCrew(data as Crew[]));
     const refetchVentures = () => supabaseBrowser.from("ventures").select("*").then(({ data }) => data && setVentures(data as Venture[]));
     const refetchCommits = () => supabaseBrowser.from("commits").select("*").order("ts", { ascending: false }).limit(200).then(({ data }) => data && setCommits(data as CommitRow[]));
+    const refetchCommitSummaries = () => supabaseBrowser.from("commit_summaries").select("*").order("created_at", { ascending: false }).limit(20).then(({ data }) => data && setCommitSummaries(data as CommitSummary[]));
     const channel = supabaseBrowser
       .channel("flowsys-squad")
       .on("postgres_changes", { event: "*", schema: "public", table: "crew" }, refetchCrew)
       .on("postgres_changes", { event: "*", schema: "public", table: "ventures" }, refetchVentures)
       .on("postgres_changes", { event: "*", schema: "public", table: "commits" }, refetchCommits)
+      .on("postgres_changes", { event: "*", schema: "public", table: "commit_summaries" }, refetchCommitSummaries)
       .subscribe();
     return () => { supabaseBrowser.removeChannel(channel); };
   }, []);
@@ -35,6 +39,10 @@ export function SquadClient(props: { initialCrew: Crew[]; initialVentures: Ventu
   const owner = crew.find((c) => c.status === "bottleneck");
   const selectedVenture = logVentureId ? ventures.find((v) => v.id === logVentureId) ?? null : null;
   const visibleCommits = (logVentureId ? commits.filter((c) => c.venture_id === logVentureId) : commits).slice(0, 6);
+  // Matthias kan niks met ruwe commit-berichten -- toon er de meest recente
+  // AI-samenvatting in doodgewone taal bovenop, gefilterd op dezelfde
+  // venture-keuze als de ruwe log eronder.
+  const latestSummary = (logVentureId ? commitSummaries.filter((s) => s.venture_id === logVentureId) : commitSummaries)[0] ?? null;
 
   async function saveCrew(c: Crew, status: CrewStatus, task: string, note: string, ventureId: string | null) {
     await post("/api/crew", { id: c.id, status, task, note, current_venture_id: ventureId });
@@ -90,6 +98,12 @@ export function SquadClient(props: { initialCrew: Crew[]; initialVentures: Ventu
       </div>
       <div className="gitlog">
         <div className="gitlog-head">Recente Git-activiteit{selectedVenture ? ` — ${selectedVenture.name}` : " — alle ventures"}</div>
+        {latestSummary && (
+          <div className="gitlog-summary">
+            <span className="gitlog-summary-icon">🤖</span>
+            <span>{latestSummary.summary}<span className="gitlog-summary-time">{relTime(latestSummary.created_at)}</span></span>
+          </div>
+        )}
         {visibleCommits.length === 0 && <div className="gitlog-empty">Nog geen commits binnengekomen — zie README voor de webhook-setup.</div>}
         {visibleCommits.map((g) => (
           <div className="gitlog-line" key={g.id}>
