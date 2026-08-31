@@ -10,7 +10,7 @@ export interface Crew {
 export interface Venture {
   id: string; name: string; stage: Stage; price: string; feature: string;
   repo_done: boolean; domein_done: boolean; stripe_done: boolean;
-  github_repo: string | null; pitched_by: string | null;
+  github_repo: string | null; pitched_by: string | null; royalty_pct: number;
   mrr: number; mrr_prev: number; sprint_deadline: string | null; sprint_label: string;
   mrr_source_url: string | null; mrr_synced_at: string | null; notion_url: string | null;
 }

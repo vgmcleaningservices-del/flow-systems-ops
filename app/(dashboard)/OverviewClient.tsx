@@ -5,7 +5,7 @@ import { AnimatePresence } from "motion/react";
 import * as motion from "motion/react-client";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { post } from "@/lib/api-client";
-import type { Crew, Task, Tool, Venture, WikiPage } from "@/lib/dashboard-types";
+import type { Crew, Payout, Task, Tool, Venture, WikiPage } from "@/lib/dashboard-types";
 import { fmtEUR, pad, relTime } from "@/lib/dashboard-format";
 import { STAGE_LABEL } from "@/lib/dashboard-constants";
 import { ForYouList } from "./_components/ForYouList";
@@ -43,7 +43,7 @@ function useCountUp(target: number, durationMs = 600) {
 type OverviewProps =
   | {
       variant: "matthias";
-      initialVentures: Venture[]; initialCrew: Crew[]; initialTasks: Task[]; initialTools: Tool[];
+      initialVentures: Venture[]; initialCrew: Crew[]; initialTasks: Task[]; initialTools: Tool[]; initialPayouts: Payout[];
       lastActivityIso: string | null;
     }
   | {
@@ -98,12 +98,13 @@ function WorkflowCard() {
 }
 
 function MatthiasOverview(props: {
-  initialVentures: Venture[]; initialCrew: Crew[]; initialTasks: Task[]; initialTools: Tool[]; lastActivityIso: string | null;
+  initialVentures: Venture[]; initialCrew: Crew[]; initialTasks: Task[]; initialTools: Tool[]; initialPayouts: Payout[]; lastActivityIso: string | null;
 }) {
   const [ventures, setVentures] = useState(props.initialVentures);
   const [crew, setCrew] = useState(props.initialCrew);
   const [tasks, setTasks] = useState(props.initialTasks);
   const [tools, setTools] = useState(props.initialTools);
+  const [payouts, setPayouts] = useState(props.initialPayouts);
   const [now, setNow] = useState(Date.now());
   const [selectedVentureId, setSelectedVentureId] = useState<string | null>(null);
   const [editMrrVentureId, setEditMrrVentureId] = useState<string | null>(null);
@@ -121,12 +122,14 @@ function MatthiasOverview(props: {
     const refetchCrew = () => supabaseBrowser.from("crew").select("*").order("rank").then(({ data }) => data && setCrew(data as Crew[]));
     const refetchTasks = () => supabaseBrowser.from("tasks").select("*").order("created_at", { ascending: false }).limit(200).then(({ data }) => data && setTasks(data as Task[]));
     const refetchTools = () => supabaseBrowser.from("tools").select("*").order("name").then(({ data }) => data && setTools(data as Tool[]));
+    const refetchPayouts = () => supabaseBrowser.from("payouts").select("*").order("paid_at", { ascending: false }).then(({ data }) => data && setPayouts(data as Payout[]));
     const channel = supabaseBrowser
       .channel("flowsys-overview")
       .on("postgres_changes", { event: "*", schema: "public", table: "ventures" }, refetchVentures)
       .on("postgres_changes", { event: "*", schema: "public", table: "crew" }, refetchCrew)
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, refetchTasks)
       .on("postgres_changes", { event: "*", schema: "public", table: "tools" }, refetchTools)
+      .on("postgres_changes", { event: "*", schema: "public", table: "payouts" }, refetchPayouts)
       .subscribe();
     return () => { supabaseBrowser.removeChannel(channel); };
   }, []);
@@ -159,6 +162,12 @@ function MatthiasOverview(props: {
   const animatedBottlenecks = useCountUp(bottleneckCount);
   const activeTools = tools.filter((t) => t.status === "active");
   const nextRenewal = [...activeTools].filter((t) => t.renews_on).sort((a, b) => (a.renews_on! < b.renews_on! ? -1 : 1))[0] ?? null;
+  // "Alles wat met geld te maken heeft" op één plek, i.p.v. moeten doorklikken naar
+  // Tools en Uitbetalingen om het volledige financiële plaatje samen te vissen.
+  const monthlyToolsCost = activeTools.reduce((s, t) => s + (t.billing_cycle === "jaarlijks" ? t.cost / 12 : t.billing_cycle === "maandelijks" ? t.cost : 0), 0);
+  const oneTimeTools = tools.filter((t) => t.billing_cycle === "eenmalig");
+  const oneTimeToolsCost = oneTimeTools.reduce((s, t) => s + t.cost, 0);
+  const totalPayouts = payouts.reduce((s, p) => s + p.amount, 0);
   // Eén datapunt laten opvallen i.p.v. overal kleur -- zelfde spaarzame
   // accent-highlight die op mobit.framer.website één balk in een staafdiagram
   // liet opvallen, hier de venture met de hoogste MRR.
@@ -206,6 +215,26 @@ function MatthiasOverview(props: {
           <div className="tile-label"><span>Eerstvolgende tool-vervaldatum</span></div>
           <div className="tile-value" style={{ fontSize: 22 }}>{nextRenewal ? new Date(nextRenewal.renews_on!).toLocaleDateString("nl-BE") : "—"}</div>
           <div className="tile-foot">{nextRenewal ? nextRenewal.name : "niks gepland"}</div>
+        </TiltCard>
+      </motion.div>
+
+      <div className="section-head"><span className="section-title">Financieel</span></div>
+      <p className="section-sub">Alles wat met geld te maken heeft, in één oogopslag</p>
+      <motion.div className="telemetry" variants={staggerContainerVariants} initial="hidden" animate="show">
+        <TiltCard className="tile" variants={staggerItemVariants}>
+          <div className="tile-label"><span>Tool-kosten / maand</span></div>
+          <div className="tile-value">{fmtEUR(monthlyToolsCost)}</div>
+          <div className="tile-foot">{activeTools.length} actieve {activeTools.length === 1 ? "tool" : "tools"} · <Link href="/tools" style={{ color: "var(--accent)" }}>bekijk →</Link></div>
+        </TiltCard>
+        <TiltCard className="tile" variants={staggerItemVariants}>
+          <div className="tile-label"><span>Eenmalige betalingen</span></div>
+          <div className="tile-value">{fmtEUR(oneTimeToolsCost)}</div>
+          <div className="tile-foot">{oneTimeTools.length} eenmalige {oneTimeTools.length === 1 ? "betaling" : "betalingen"} · <Link href="/tools" style={{ color: "var(--accent)" }}>bekijk →</Link></div>
+        </TiltCard>
+        <TiltCard className="tile" variants={staggerItemVariants}>
+          <div className="tile-label"><span>Totaal uitbetaald</span></div>
+          <div className="tile-value">{fmtEUR(totalPayouts)}</div>
+          <div className="tile-foot">{payouts.length} {payouts.length === 1 ? "uitbetaling" : "uitbetalingen"} gelogd · <Link href="/uitbetalingen" style={{ color: "var(--accent)" }}>bekijk →</Link></div>
         </TiltCard>
       </motion.div>
 

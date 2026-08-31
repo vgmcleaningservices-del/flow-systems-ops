@@ -27,7 +27,8 @@ create table if not exists ventures (
   domein_done boolean not null default false,
   stripe_done boolean not null default false,
   github_repo text,                   -- GitHub repo name (e.g. "suppliersync") for webhook matching
-  pitched_by text references crew(id), -- who scouted this idea -- drives Zende's royalty
+  pitched_by text references crew(id), -- who scouted/pitched this idea
+  royalty_pct numeric not null default 0, -- instelbaar royalty-% voor pitched_by op deze venture's MRR
   mrr int not null default 0,
   mrr_prev int not null default 0,
   mrr_source_url text,                -- if set, /api/mrr-sync pulls real MRR from this venture's own /api/mrr
@@ -161,11 +162,11 @@ insert into crew (id, name, rank, role, github_username, status, task, note) val
   ('zende',   'Zende',   'R4', 'R&D Scout — parallelle track', null, 'active', 'Doorlopend: volgend B2B pijnpunt scouten', '')
 on conflict (id) do nothing;
 
-insert into ventures (id, name, stage, price, feature, repo_done, domein_done, stripe_done, github_repo, pitched_by, mrr, mrr_prev, sprint_deadline, sprint_label) values
-  ('cartrescue',   'CartRescue AI', 'scouting',   '€149 / mnd', '', false, false, false, null, 'zende', 0, 0, null, ''),
-  ('disputenuke',  'DisputeNuke',   'scouting',   'Nog niet bepaald', '', false, false, false, null, 'zende', 0, 0, null, ''),
-  ('suppliersync', 'SupplierSync',  'sprint',     '€49 / mnd', 'Meta Ads Auto-Kill Switch', true, false, false, 'suppliersync', 'zende', 1689, 1560, null, 'SupplierSync'),
-  ('tendertox',    'Tendertox',     'exit-ready', '€199 / mnd', 'RFP Matrix AI', true, true, true, 'tendertox', null, 0, 0, null, '')
+insert into ventures (id, name, stage, price, feature, repo_done, domein_done, stripe_done, github_repo, pitched_by, royalty_pct, mrr, mrr_prev, sprint_deadline, sprint_label) values
+  ('cartrescue',   'CartRescue AI', 'scouting',   '€149 / mnd', '', false, false, false, null, 'zende', 5, 0, 0, null, ''),
+  ('disputenuke',  'DisputeNuke',   'scouting',   'Nog niet bepaald', '', false, false, false, null, 'zende', 5, 0, 0, null, ''),
+  ('suppliersync', 'SupplierSync',  'sprint',     '€49 / mnd', 'Meta Ads Auto-Kill Switch', true, false, false, 'suppliersync', 'zende', 5, 1689, 1560, null, 'SupplierSync'),
+  ('tendertox',    'Tendertox',     'exit-ready', '€199 / mnd', 'RFP Matrix AI', true, true, true, 'tendertox', null, 0, 0, 0, null, '')
 on conflict (id) do nothing;
 
 update crew set current_venture_id = 'suppliersync' where id in ('laurens', 'seba', 'runar');

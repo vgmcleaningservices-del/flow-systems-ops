@@ -30,16 +30,16 @@ export function UitbetalingenClient(props: { initialMeName: string; initialVentu
       <p className="section-sub">Alleen een overzicht — dit voert nooit zelf een betaling uit, jij betaalt en logt het hier</p>
       <div className="ledger-wrap">
         <table className="ledger-table">
-          <thead><tr><th>Venture</th><th className="num">MRR</th><th>Gepitcht door</th><th className="num">Zende royalty (5%)</th><th className="num">House-aandeel</th></tr></thead>
+          <thead><tr><th>Venture</th><th className="num">MRR</th><th>Gepitcht door</th><th className="num">Royalty</th><th className="num">House-aandeel</th></tr></thead>
           <tbody>
             {ventures.filter((v) => v.mrr > 0).map((v) => {
-              const royalty = v.pitched_by === "zende" ? v.mrr * 0.05 : 0;
+              const royalty = v.royalty_pct > 0 ? v.mrr * (v.royalty_pct / 100) : 0;
               return (
                 <tr key={v.id}>
                   <td data-label="Venture">{v.name}</td>
                   <td className="num" data-label="MRR">{fmtEUR(v.mrr)}</td>
                   <td data-label="Gepitcht door">{crew.find((c) => c.id === v.pitched_by)?.name ?? "—"}</td>
-                  <td className="num" data-label="Zende royalty (5%)">{royalty > 0 ? fmtEUR(royalty) : "—"}</td>
+                  <td className="num" data-label="Royalty">{royalty > 0 ? `${fmtEUR(royalty)} (${v.royalty_pct}%)` : "—"}</td>
                   <td className="num" data-label="House-aandeel">{fmtEUR(v.mrr - royalty)}</td>
                 </tr>
               );

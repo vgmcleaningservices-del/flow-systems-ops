@@ -11,6 +11,7 @@ export function VentureForm({ venture, crew, onCancel, onSave }: { venture: Vent
   const [mrrSourceUrl, setMrrSourceUrl] = useState(venture.mrr_source_url ?? "");
   const [notionUrl, setNotionUrl] = useState(venture.notion_url ?? "");
   const [pitchedBy, setPitchedBy] = useState(venture.pitched_by ?? "");
+  const [royaltyPct, setRoyaltyPct] = useState(venture.royalty_pct);
   const [repo, setRepo] = useState(venture.repo_done);
   const [domein, setDomein] = useState(venture.domein_done);
   const [stripe, setStripe] = useState(venture.stripe_done);
@@ -32,13 +33,16 @@ export function VentureForm({ venture, crew, onCancel, onSave }: { venture: Vent
           {crew.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
+      <div><label>Royalty voor pitcher (% van MRR)</label>
+        <input className="field" type="number" min={0} max={100} step={0.5} value={royaltyPct} onChange={(e) => setRoyaltyPct(Number(e.target.value))} />
+      </div>
       <div className="checks">
         <label className="check-label"><input type="checkbox" checked={repo} onChange={(e) => setRepo(e.target.checked)} /> Repo</label>
         <label className="check-label"><input type="checkbox" checked={domein} onChange={(e) => setDomein(e.target.checked)} /> Domein</label>
         <label className="check-label"><input type="checkbox" checked={stripe} onChange={(e) => setStripe(e.target.checked)} /> Stripe</label>
       </div>
       <div className="edit-actions">
-        <button className="btn primary" onClick={() => onSave({ stage, price, feature, github_repo: githubRepo || null, mrr_source_url: mrrSourceUrl || null, notion_url: notionUrl || null, pitched_by: pitchedBy || null, repo_done: repo, domein_done: domein, stripe_done: stripe })}>Opslaan</button>
+        <button className="btn primary" onClick={() => onSave({ stage, price, feature, github_repo: githubRepo || null, mrr_source_url: mrrSourceUrl || null, notion_url: notionUrl || null, pitched_by: pitchedBy || null, royalty_pct: royaltyPct, repo_done: repo, domein_done: domein, stripe_done: stripe })}>Opslaan</button>
         <button className="btn ghost" onClick={onCancel}>Annuleren</button>
       </div>
     </div>

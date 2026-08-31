@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
   // not the type, so clearing isn't silently dropped.
   if ("github_repo" in body) update.github_repo = body.github_repo || null;
   if ("pitched_by" in body) update.pitched_by = body.pitched_by || null;
+  if (typeof body.royalty_pct === "number") update.royalty_pct = body.royalty_pct;
   if ("mrr_source_url" in body) update.mrr_source_url = body.mrr_source_url || null;
   if ("notion_url" in body) update.notion_url = body.notion_url || null;
 
