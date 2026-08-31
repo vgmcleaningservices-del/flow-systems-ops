@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { ALL_PEOPLE } from "@/lib/people";
 
@@ -29,6 +29,13 @@ interface Task {
   created_by: string; assigned_to: string; handed_off_by: string | null; handed_off_at: string | null;
   created_at: string; updated_at: string;
 }
+type BillingCycle = "maandelijks" | "jaarlijks" | "eenmalig";
+type ToolStatus = "active" | "cancelled";
+interface Tool {
+  id: number; name: string; category: string; url: string | null; cost: number;
+  billing_cycle: BillingCycle; renews_on: string | null; account_owner: string | null;
+  notes: string; status: ToolStatus; created_at: string; updated_at: string;
+}
 
 const STATUS_LABEL: Record<CrewStatus, string> = { waiting: "Wachtend", active: "Geïsoleerd · Actief", bottleneck: "Active Bottleneck", auto: "Geautomatiseerd" };
 const STATUS_TAG: Record<CrewStatus, string> = { waiting: "t-waiting", active: "t-active", bottleneck: "t-bottleneck", auto: "t-auto" };
@@ -41,6 +48,12 @@ const TASK_STATUS_TAG: Record<TaskStatus, string> = { todo: "t-todo", in_progres
 // oppak-actie, good = klaar) -- niet zomaar 4 willekeurige tinten.
 const TASK_COLOR: Record<TaskStatus, string> = { todo: "var(--idle)", in_progress: "var(--accent)", handed_off: "var(--warn)", done: "var(--good)" };
 const PEOPLE_NAME: Record<string, string> = Object.fromEntries(ALL_PEOPLE.map((p) => [p.id, p.name]));
+const TOOL_CATEGORIES = ["hosting", "database", "payments", "ai", "communicatie", "domein", "overig"] as const;
+const TOOL_CATEGORY_LABEL: Record<string, string> = {
+  hosting: "Hosting", database: "Database", payments: "Payments", ai: "AI",
+  communicatie: "Communicatie", domein: "Domein", overig: "Overig",
+};
+const BILLING_LABEL: Record<BillingCycle, string> = { maandelijks: "/ maand", jaarlijks: "/ jaar", eenmalig: "eenmalig" };
 const METRIC_LABELS: Record<string, string> = {
   outreach_contacted: "Outreach — contacted",
   outreach_replies: "Outreach — replies",
@@ -74,7 +87,7 @@ export default function Dashboard(props: {
   initialMe: string | null;
   initialCrew: Crew[]; initialVentures: Venture[]; initialCommits: CommitRow[];
   initialDirectives: Directive[]; initialCrewEvents: CrewEvent[]; initialMetrics: Metric[]; initialPayouts: Payout[];
-  initialTasks: Task[];
+  initialTasks: Task[]; initialTools: Tool[];
 }) {
   const [crew, setCrew] = useState(props.initialCrew);
   const [ventures, setVentures] = useState(props.initialVentures);
@@ -84,6 +97,7 @@ export default function Dashboard(props: {
   const [metrics, setMetrics] = useState(props.initialMetrics);
   const [payouts, setPayouts] = useState(props.initialPayouts);
   const [tasks, setTasks] = useState(props.initialTasks);
+  const [tools, setTools] = useState(props.initialTools);
   // Server-geverifieerd (flowsys_identity-cookie) -- geen los te kiezen dropdown
   // meer. Kan alleen veranderen via een echte login, dus geen state nodig.
   const me = props.initialMe ?? "";
@@ -97,6 +111,7 @@ export default function Dashboard(props: {
   const [editVentureId, setEditVentureId] = useState<string | null>(null);
   const [openTaskId, setOpenTaskId] = useState<number | null>(null);
   const [editTaskId, setEditTaskId] = useState<number | null>(null);
+  const [editToolId, setEditToolId] = useState<number | null>(null);
   const [directiveText, setDirectiveText] = useState("");
   const [syncingMrr, setSyncingMrr] = useState(false);
 
@@ -115,6 +130,7 @@ export default function Dashboard(props: {
       metrics: () => supabaseBrowser.from("metrics").select("*").order("created_at", { ascending: false }).limit(100).then(({ data }) => data && setMetrics(data as Metric[])),
       payouts: () => supabaseBrowser.from("payouts").select("*").order("paid_at", { ascending: false }).limit(50).then(({ data }) => data && setPayouts(data as Payout[])),
       tasks: () => supabaseBrowser.from("tasks").select("*").order("created_at", { ascending: false }).limit(200).then(({ data }) => data && setTasks(data as Task[])),
+      tools: () => supabaseBrowser.from("tools").select("*").order("name").then(({ data }) => data && setTools(data as Tool[])),
     };
     const channel = supabaseBrowser
       .channel("flowsys-dashboard")
@@ -126,6 +142,7 @@ export default function Dashboard(props: {
       .on("postgres_changes", { event: "*", schema: "public", table: "metrics" }, refetch.metrics)
       .on("postgres_changes", { event: "*", schema: "public", table: "payouts" }, refetch.payouts)
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, refetch.tasks)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tools" }, refetch.tools)
       .subscribe();
     return () => { supabaseBrowser.removeChannel(channel); };
   }, []);
@@ -164,6 +181,10 @@ export default function Dashboard(props: {
       urgent = h < 24;
     }
   }
+
+  const activeTools = tools.filter((t) => t.status === "active");
+  const monthlyToolsCost = activeTools.reduce((s, t) => s + (t.billing_cycle === "jaarlijks" ? t.cost / 12 : t.billing_cycle === "maandelijks" ? t.cost : 0), 0);
+  const nextRenewal = [...activeTools].filter((t) => t.renews_on).sort((a, b) => (a.renews_on! < b.renews_on! ? -1 : 1))[0] ?? null;
 
   const visibleCommits = (selectedVentureId ? commits.filter((c) => c.venture_id === selectedVentureId) : commits).slice(0, 6);
   const visibleTasks = selectedVentureId ? tasks.filter((t) => t.venture_id === selectedVentureId) : tasks;
@@ -205,6 +226,13 @@ export default function Dashboard(props: {
     await post(`/api/tasks/${t.id}`, patch);
     setEditTaskId(null);
   }
+  async function createTool(body: Record<string, unknown>) {
+    return post("/api/tools", body);
+  }
+  async function saveTool(t: Tool, patch: Record<string, unknown>) {
+    await post(`/api/tools/${t.id}`, patch);
+    setEditToolId(null);
+  }
 
   return (
     <div className="wrap">
@@ -217,6 +245,36 @@ export default function Dashboard(props: {
         </div>
       </div>
       <p className="section-sub">Laatste activiteit: <b>{relTime(lastActivityIso)}</b></p>
+
+      {/* WERKWIJZE */}
+      <div className="workflow-card">
+        <div className="workflow-head">
+          <span className="workflow-title">Werkwijze — voor &amp; na elke sessie</span>
+          <span className="workflow-sub">Voor Seba en Laurens</span>
+        </div>
+        <div className="workflow-grid">
+          <div>
+            <div className="workflow-col-label">Voor je begint</div>
+            <ol className="workflow-steps">
+              <li><span className="workflow-num">1</span><span>Check <b>Voor jou</b> bij Taken hieronder — staat er iets klaar dat is doorgestuurd?</span></li>
+              <li><span className="workflow-num">2</span><span>Lees de VETO Console onderaan voor nieuwe instructies van Matthias.</span></li>
+              <li><span className="workflow-num">3</span><span>Werk in de juiste projectmap — zie de naamregel hieronder.</span></li>
+            </ol>
+          </div>
+          <div>
+            <div className="workflow-col-label after">Na afloop</div>
+            <ol className="workflow-steps">
+              <li><span className="workflow-num">1</span><span>Commit en push je werk. Gebruik <code>[PASS:NAAM]</code> in de commit-message als je het doorgeeft.</span></li>
+              <li><span className="workflow-num">2</span><span>Zet de taak op de juiste status — Bezig, Klaar, of stuur 'm door naar de volgende persoon.</span></li>
+              <li><span className="workflow-num">3</span><span>Sluit je sessie gewoon af — die meldt zichzelf automatisch bij het Agent Dashboard.</span></li>
+            </ol>
+          </div>
+        </div>
+        <div className="workflow-callout">
+          <span className="workflow-callout-icon">📁</span>
+          <p><b>Eén map per programma.</b> Noem je projectmap exact zoals de venture hierboven heet (bv. <code>tendertox</code>, <code>suppliersync</code>) — geen extra tekst zoals &quot;voor seba&quot;, geen submappen. Het Agent Dashboard toont de mapnaam automatisch als projectnaam, dus alleen zo klopt wat Matthias daar ziet.</p>
+        </div>
+      </div>
 
       {/* 00 OVERVIEW */}
       <div className="section-head"><span className="section-num">00</span><span className="section-title">Alles-oké? — Venture Overzicht</span><span className="section-line" /></div>
@@ -521,6 +579,54 @@ export default function Dashboard(props: {
         </div>
       </div>
 
+      {/* TOOLS & ABONNEMENTEN */}
+      <div className="section-head"><span className="section-num">08</span><span className="section-title">Tools &amp; Abonnementen</span><span className="section-line" /></div>
+      <p className="section-sub">Alle programma&apos;s en diensten die Flow Systems gebruikt, op één plek</p>
+      <div className="telemetry" style={{ gridTemplateColumns: "repeat(2, 1fr)", marginBottom: 16 }}>
+        <div className="tile">
+          <div className="tile-label"><span>Totaal / maand</span></div>
+          <div className="tile-value">{fmtEUR(monthlyToolsCost)}</div>
+          <div className="tile-foot">{activeTools.length} actieve {activeTools.length === 1 ? "tool" : "tools"}</div>
+        </div>
+        <div className="tile">
+          <div className="tile-label"><span>Eerstvolgende vervaldatum</span></div>
+          <div className="tile-value" style={{ fontSize: 22 }}>{nextRenewal ? new Date(nextRenewal.renews_on!).toLocaleDateString("nl-BE") : "—"}</div>
+          <div className="tile-foot">{nextRenewal ? nextRenewal.name : "niks gepland"}</div>
+        </div>
+      </div>
+      <div className="ledger-wrap">
+        <table className="ledger-table">
+          <thead>
+            <tr><th>Naam</th><th className="num">Kosten</th><th>Vervalt</th><th>Beheerder</th><th></th></tr>
+          </thead>
+          <tbody>
+            {tools.map((t) => (
+              <Fragment key={t.id}>
+                <tr style={{ opacity: t.status === "cancelled" ? 0.5 : 1 }}>
+                  <td>
+                    <div style={{ fontWeight: 600, color: "var(--text)" }}>{t.name}</div>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 3 }}>
+                      <span className="task-venture-badge">{TOOL_CATEGORY_LABEL[t.category] ?? t.category}</span>
+                      {t.status === "cancelled" && <span className="task-venture-badge">Geannuleerd</span>}
+                      {t.url && <a href={t.url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: "var(--accent)" }}>Open →</a>}
+                    </div>
+                  </td>
+                  <td className="num">{t.cost > 0 ? `${fmtEUR(t.cost)} ${BILLING_LABEL[t.billing_cycle]}` : "gratis"}</td>
+                  <td>{t.renews_on ? new Date(t.renews_on).toLocaleDateString("nl-BE") : "—"}</td>
+                  <td>{t.account_owner ? (PEOPLE_NAME[t.account_owner] ?? t.account_owner) : "—"}</td>
+                  <td style={{ textAlign: "right" }}><button className="icon-btn" onClick={() => setEditToolId(editToolId === t.id ? null : t.id)} aria-label="Bewerk">✎</button></td>
+                </tr>
+                {editToolId === t.id && (
+                  <tr><td colSpan={5}><ToolForm tool={t} onCancel={() => setEditToolId(null)} onSave={(patch) => saveTool(t, patch)} /></td></tr>
+                )}
+              </Fragment>
+            ))}
+            {tools.length === 0 && <tr><td colSpan={5} style={{ fontStyle: "italic", color: "var(--text-faint)" }}>Nog niks toegevoegd.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <ToolCreateForm onSubmit={createTool} />
+
       <footer>FLOW SYSTEMS B.V. — INTERN GEBRUIK — NIET DELEN BUITEN KERNTEAM</footer>
     </div>
   );
@@ -657,6 +763,82 @@ function TaskCreateForm({ crew, ventures, defaultVentureId, onSubmit }: {
       <input className="field" placeholder="omschrijving (optioneel)" value={description} onChange={(e) => setDescription(e.target.value)} />
       <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>{crew.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
       <button className="btn primary" onClick={submit}>+ Taak aanmaken</button>
+    </div>
+  );
+}
+
+function ToolForm({ tool, onCancel, onSave }: {
+  tool: Tool; onCancel: () => void; onSave: (patch: Record<string, unknown>) => void;
+}) {
+  const [name, setName] = useState(tool.name);
+  const [category, setCategory] = useState(tool.category);
+  const [url, setUrl] = useState(tool.url ?? "");
+  const [cost, setCost] = useState(tool.cost);
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>(tool.billing_cycle);
+  const [renewsOn, setRenewsOn] = useState(tool.renews_on ?? "");
+  const [accountOwner, setAccountOwner] = useState(tool.account_owner ?? "");
+  const [notes, setNotes] = useState(tool.notes);
+  const [status, setStatus] = useState<ToolStatus>(tool.status);
+  return (
+    <div className="edit-form">
+      <div><label>Naam</label><input className="field" value={name} onChange={(e) => setName(e.target.value)} /></div>
+      <div><label>Categorie</label>
+        <select value={category} onChange={(e) => setCategory(e.target.value)}>
+          {TOOL_CATEGORIES.map((c) => <option key={c} value={c}>{TOOL_CATEGORY_LABEL[c]}</option>)}
+        </select>
+      </div>
+      <div><label>Link</label><input className="field" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." /></div>
+      <div style={{ display: "flex", gap: 9 }}>
+        <div style={{ flex: 1 }}><label>Kosten (€)</label><input className="field" type="number" min={0} value={cost} onChange={(e) => setCost(parseFloat(e.target.value || "0"))} /></div>
+        <div style={{ flex: 1 }}><label>Cyclus</label>
+          <select value={billingCycle} onChange={(e) => setBillingCycle(e.target.value as BillingCycle)}>
+            {(Object.keys(BILLING_LABEL) as BillingCycle[]).map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+        </div>
+      </div>
+      <div><label>Vervaldatum (optioneel)</label><input className="field" type="date" value={renewsOn} onChange={(e) => setRenewsOn(e.target.value)} /></div>
+      <div><label>Beheerder</label>
+        <select value={accountOwner} onChange={(e) => setAccountOwner(e.target.value)}>
+          <option value="">— onbekend —</option>
+          {ALL_PEOPLE.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </div>
+      <div><label>Notities</label><input className="field" value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
+      <div><label>Status</label>
+        <select value={status} onChange={(e) => setStatus(e.target.value as ToolStatus)}>
+          <option value="active">Actief</option>
+          <option value="cancelled">Geannuleerd</option>
+        </select>
+      </div>
+      <div className="edit-actions">
+        <button className="btn primary" onClick={() => onSave({ name, category, url: url || null, cost, billing_cycle: billingCycle, renews_on: renewsOn || null, account_owner: accountOwner || null, notes, status })}>Opslaan</button>
+        <button className="btn ghost" onClick={onCancel}>Annuleren</button>
+      </div>
+    </div>
+  );
+}
+
+function ToolCreateForm({ onSubmit }: { onSubmit: (body: Record<string, unknown>) => Promise<boolean> }) {
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState<string>("overig");
+  const [cost, setCost] = useState<number>(0);
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>("maandelijks");
+  const [accountOwner, setAccountOwner] = useState("");
+
+  async function submit() {
+    if (!name.trim()) return;
+    const ok = await onSubmit({ name: name.trim(), category, cost, billing_cycle: billingCycle, account_owner: accountOwner || null });
+    if (ok) { setName(""); setCost(0); }
+  }
+
+  return (
+    <div className="form-inline">
+      <input className="field" placeholder="Naam (bv. Vercel)" value={name} onChange={(e) => setName(e.target.value)} />
+      <select value={category} onChange={(e) => setCategory(e.target.value)}>{TOOL_CATEGORIES.map((c) => <option key={c} value={c}>{TOOL_CATEGORY_LABEL[c]}</option>)}</select>
+      <input className="field" type="number" min={0} placeholder="kosten €" value={cost || ""} onChange={(e) => setCost(parseFloat(e.target.value || "0"))} style={{ maxWidth: 100 }} />
+      <select value={billingCycle} onChange={(e) => setBillingCycle(e.target.value as BillingCycle)}>{(Object.keys(BILLING_LABEL) as BillingCycle[]).map((b) => <option key={b} value={b}>{b}</option>)}</select>
+      <select value={accountOwner} onChange={(e) => setAccountOwner(e.target.value)}><option value="">— beheerder —</option>{ALL_PEOPLE.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+      <button className="btn primary" onClick={submit}>+ Tool toevoegen</button>
     </div>
   );
 }

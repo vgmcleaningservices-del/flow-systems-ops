@@ -115,6 +115,24 @@ create table if not exists tasks (
   updated_at timestamptz not null default now()
 );
 
+-- Overzicht van alle programma's/diensten die Flow Systems gebruikt (Vercel,
+-- Supabase, Stripe, Notion, ...), met kosten en vervaldatum -- puur ter referentie,
+-- geen koppeling met andere tabellen nodig.
+create table if not exists tools (
+  id bigint generated always as identity primary key,
+  name text not null,
+  category text not null default 'overig', -- hosting | database | payments | ai | communicatie | domein | overig
+  url text,
+  cost numeric not null default 0,
+  billing_cycle text not null default 'maandelijks', -- maandelijks | jaarlijks | eenmalig
+  renews_on date,
+  account_owner text,
+  notes text not null default '',
+  status text not null default 'active', -- active | cancelled
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 -- seed data — edit freely afterwards from the dashboard or the Supabase table editor.
 -- Order matters: crew and ventures reference each other (pitched_by / current_venture_id),
 -- so insert both without their cross-reference first, then backfill with UPDATEs —
@@ -145,6 +163,7 @@ alter table crew_events enable row level security;
 alter table metrics enable row level security;
 alter table payouts enable row level security;
 alter table tasks enable row level security;
+alter table tools enable row level security;
 
 create policy "public read crew" on crew for select using (true);
 create policy "public read ventures" on ventures for select using (true);
@@ -154,6 +173,7 @@ create policy "public read crew_events" on crew_events for select using (true);
 create policy "public read metrics" on metrics for select using (true);
 create policy "public read payouts" on payouts for select using (true);
 create policy "public read tasks" on tasks for select using (true);
+create policy "public read tools" on tools for select using (true);
 
 -- Realtime: let the dashboard subscribe to live changes instead of polling.
 alter publication supabase_realtime add table crew;
@@ -162,4 +182,5 @@ alter publication supabase_realtime add table commits;
 alter publication supabase_realtime add table directives;
 alter publication supabase_realtime add table metrics;
 alter publication supabase_realtime add table payouts;
+alter publication supabase_realtime add table tools;
 alter publication supabase_realtime add table tasks;
