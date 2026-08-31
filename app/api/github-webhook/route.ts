@@ -43,8 +43,17 @@ export async function POST(req: NextRequest) {
   const venture = ventures.find((v) => (v.github_repo || "").toLowerCase() === repo.toLowerCase());
   const ventureId = venture?.id ?? null;
 
-  const findByGithub = (login: string | undefined | null) =>
-    login ? crew.find((c) => (c.github_username || "").toLowerCase() === login.toLowerCase()) : undefined;
+  // Het team pusht allemaal via hetzelfde GitHub-account (geen los account per
+  // persoon), dus github_username staat voor iedereen op null en matcht nooit.
+  // Val terug op de commit-auteursnaam (git config user.name, lokaal per
+  // persoon in te stellen) tegen crew.name -- exact zoals [PASS:NAAM] al werkt.
+  const findByAuthor = (login: string | undefined | null, authorName: string | undefined | null) => {
+    if (login) {
+      const byLogin = crew.find((c) => (c.github_username || "").toLowerCase() === login.toLowerCase());
+      if (byLogin) return byLogin;
+    }
+    return authorName ? crew.find((c) => c.name.toLowerCase() === authorName.toLowerCase()) : undefined;
+  };
   const findByPassTarget = (name: string) => crew.find((c) => c.name.toLowerCase() === name.toLowerCase());
 
   async function logEvent(crewId: string, fromStatus: string | null, toStatus: string) {
@@ -58,7 +67,7 @@ export async function POST(req: NextRequest) {
     const authorLogin: string | undefined = commit.author?.username;
     const authorName: string = commit.author?.name || authorLogin || "onbekend";
     const ts = commit.timestamp || new Date().toISOString();
-    const pusher = findByGithub(authorLogin);
+    const pusher = findByAuthor(authorLogin, authorName);
     const target = passTo ? findByPassTarget(passTo) : undefined;
 
     await db.from("commits").insert({ repo, venture_id: ventureId, crew_id: pusher?.id ?? null, sha: commit.id, message, author: authorName, pass_to: passTo, ts });
