@@ -27,6 +27,12 @@ export function ToolsClient(props: { initialTools: Tool[] }) {
   const activeTools = tools.filter((t) => t.status === "active");
   const monthlyToolsCost = activeTools.reduce((s, t) => s + (t.billing_cycle === "jaarlijks" ? t.cost / 12 : t.billing_cycle === "maandelijks" ? t.cost : 0), 0);
   const nextRenewal = [...activeTools].filter((t) => t.renews_on).sort((a, b) => (a.renews_on! < b.renews_on! ? -1 : 1))[0] ?? null;
+  // Eenmalige aankopen tellen nooit mee in "Totaal / maand" (terecht, het is geen
+  // maandlast) maar verdwenen daardoor helemaal uit beeld -- eigen tegel ernaast,
+  // som van alle eenmalige betalingen ooit gelogd (status-onafhankelijk: het geld
+  // is al uitgegeven, of de tool nu nog "actief" heet of niet).
+  const oneTimeTools = tools.filter((t) => t.billing_cycle === "eenmalig");
+  const oneTimeCost = oneTimeTools.reduce((s, t) => s + t.cost, 0);
 
   async function createTool(body: Record<string, unknown>) {
     return post("/api/tools", body);
@@ -40,11 +46,16 @@ export function ToolsClient(props: { initialTools: Tool[] }) {
     <>
       <div className="section-head"><span className="section-title">Tools &amp; Abonnementen</span></div>
       <p className="section-sub">Alle programma&apos;s en diensten die Flow Systems gebruikt, op één plek</p>
-      <motion.div className="telemetry cols-2" style={{ marginBottom: 16 }} variants={staggerContainerVariants} initial="hidden" animate="show">
+      <motion.div className="telemetry" style={{ marginBottom: 16 }} variants={staggerContainerVariants} initial="hidden" animate="show">
         <TiltCard className="tile" variants={staggerItemVariants}>
           <div className="tile-label"><span>Totaal / maand</span></div>
           <div className="tile-value">{fmtEUR(monthlyToolsCost)}</div>
           <div className="tile-foot">{activeTools.length} actieve {activeTools.length === 1 ? "tool" : "tools"}</div>
+        </TiltCard>
+        <TiltCard className="tile" variants={staggerItemVariants}>
+          <div className="tile-label"><span>Totaal eenmalig</span></div>
+          <div className="tile-value">{fmtEUR(oneTimeCost)}</div>
+          <div className="tile-foot">{oneTimeTools.length} eenmalige {oneTimeTools.length === 1 ? "betaling" : "betalingen"}</div>
         </TiltCard>
         <TiltCard className="tile" variants={staggerItemVariants}>
           <div className="tile-label"><span>Eerstvolgende vervaldatum</span></div>
