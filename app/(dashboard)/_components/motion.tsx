@@ -1,7 +1,7 @@
 "use client";
 import { AnimatePresence, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import * as motion from "motion/react-client";
-import { useEffect, useState, type ComponentProps, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ElementType, type MouseEvent, type ReactNode } from "react";
 import type { Variants } from "motion/react";
 
 // Toegepast op bestaande containers/elementen zelf (tag omgezet naar
@@ -60,7 +60,13 @@ function useTiltEnabled() {
   return fineHover && !reducedMotion;
 }
 
-type TiltProps = ComponentProps<typeof motion.div> & { as?: "div" | "button" };
+// Losse prop-typering i.p.v. ComponentProps<typeof motion.div> -- met een
+// vaste tag-keuze (motion.div OF motion.button, bepaald op runtime) kan
+// TypeScript geen enkele propvorm meer garanderen die voor beide geldt
+// (bv. onSubmit's event-type verschilt tussen de twee), dus dat leidde tot
+// een build-fout. `rest` is hier bewust losjes getypeerd; de echte
+// call-sites geven alleen className/variants/onClick/style/children door.
+type TiltProps = { as?: "div" | "button"; style?: CSSProperties; [key: string]: unknown };
 
 // Drop-in vervanging van de bestaande motion.div/motion.button op kaarten
 // (.venture-chip, .crew-card, .app-card, .tile) -- geen extra wrapper, dus
@@ -73,7 +79,7 @@ export function TiltCard({ as = "div", style, ...rest }: TiltProps) {
   const y = useMotionValue(0);
   const rotateX = useTransform(y, [-0.5, 0.5], [8, -8]);
   const rotateY = useTransform(x, [-0.5, 0.5], [-8, 8]);
-  const Comp = as === "button" ? motion.button : motion.div;
+  const Comp = (as === "button" ? motion.button : motion.div) as ElementType;
 
   if (!enabled) return <Comp style={style} {...rest} />;
 
