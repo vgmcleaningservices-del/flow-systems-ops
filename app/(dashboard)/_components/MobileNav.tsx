@@ -9,7 +9,7 @@ export function MobileNav({ isMatthias }: { isMatthias: boolean }) {
       <button className="mobile-nav-btn" onClick={() => setOpen((o) => !o)} aria-label="Navigatie">☰</button>
       {open && (
         <div className="mobile-nav-popover">
-          <NavLinks isMatthias={isMatthias} onNavigate={() => setOpen(false)} />
+          <NavLinks isMatthias={isMatthias} onNavigate={() => setOpen(false)} scope="mobile" />
         </div>
       )}
     </>

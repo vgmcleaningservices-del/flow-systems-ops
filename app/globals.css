@@ -167,19 +167,21 @@ a { color: inherit; }
 }
 .sidebar-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; }
 .sidebar-nav a {
-  text-decoration: none; color: var(--text-dim); font-size: var(--text-base);
+  position: relative; text-decoration: none; color: var(--text-dim); font-size: var(--text-base);
   font-weight: 590; padding: 9px 12px; border-radius: var(--radius-sm);
 }
 .sidebar-nav a:hover { background: var(--surface-3); color: var(--text); }
-.sidebar-nav a.active { background: var(--accent-dim); color: var(--accent); font-weight: 650; }
+.sidebar-nav a.active { color: var(--accent); font-weight: 650; }
+/* Achtergrond van de actieve link is nu een los, gedeeld element (.nav-pill,
+   via Motion's layoutId) dat meeschuift i.p.v. instant te wisselen. */
+.nav-pill { position: absolute; inset: 0; background: var(--accent-dim); border-radius: var(--radius-sm); z-index: 0; }
+.nav-link-label { position: relative; z-index: 1; }
 .sidebar-section-label {
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--text-faint); margin: 14px 12px 4px;
 }
 .app-main { flex: 1; min-width: 0; }
-/* Topbar brand is only needed once the sidebar (which already shows it) hides.
-   Scoped to .app-shell so the still-live single-page Dashboard (no sidebar,
-   until its cutover step) keeps showing its own topbar brand as before. */
+/* Topbar brand is only needed once the sidebar (which already shows it) hides. */
 .app-shell .topbar > .brand { display: none; }
 @media (max-width: 880px) {
   .sidebar { display: none; }
