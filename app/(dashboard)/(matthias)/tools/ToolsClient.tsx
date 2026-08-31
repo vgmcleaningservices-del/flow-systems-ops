@@ -1,10 +1,13 @@
 "use client";
 import { Fragment, useEffect, useState } from "react";
+import { AnimatePresence } from "motion/react";
+import * as motion from "motion/react-client";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { post } from "@/lib/api-client";
 import type { Tool } from "@/lib/dashboard-types";
 import { PEOPLE_NAME, TOOL_CATEGORY_LABEL, BILLING_LABEL } from "@/lib/dashboard-constants";
 import { fmtEUR } from "@/lib/dashboard-format";
+import { staggerContainerVariants, staggerItemVariants } from "../../_components/motion";
 import { ToolForm } from "./ToolForm";
 import { ToolCreateForm } from "./ToolCreateForm";
 
@@ -37,27 +40,27 @@ export function ToolsClient(props: { initialTools: Tool[] }) {
     <>
       <div className="section-head"><span className="section-title">Tools &amp; Abonnementen</span></div>
       <p className="section-sub">Alle programma&apos;s en diensten die Flow Systems gebruikt, op één plek</p>
-      <div className="telemetry cols-2" style={{ marginBottom: 16 }}>
-        <div className="tile">
+      <motion.div className="telemetry cols-2" style={{ marginBottom: 16 }} variants={staggerContainerVariants} initial="hidden" animate="show">
+        <motion.div className="tile" variants={staggerItemVariants}>
           <div className="tile-label"><span>Totaal / maand</span></div>
           <div className="tile-value">{fmtEUR(monthlyToolsCost)}</div>
           <div className="tile-foot">{activeTools.length} actieve {activeTools.length === 1 ? "tool" : "tools"}</div>
-        </div>
-        <div className="tile">
+        </motion.div>
+        <motion.div className="tile" variants={staggerItemVariants}>
           <div className="tile-label"><span>Eerstvolgende vervaldatum</span></div>
           <div className="tile-value" style={{ fontSize: 22 }}>{nextRenewal ? new Date(nextRenewal.renews_on!).toLocaleDateString("nl-BE") : "—"}</div>
           <div className="tile-foot">{nextRenewal ? nextRenewal.name : "niks gepland"}</div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
       <div className="ledger-wrap">
         <table className="ledger-table">
           <thead>
             <tr><th>Naam</th><th className="num">Kosten</th><th>Vervalt</th><th>Beheerder</th><th></th></tr>
           </thead>
-          <tbody>
+          <motion.tbody variants={staggerContainerVariants} initial="hidden" animate="show">
             {tools.map((t) => (
               <Fragment key={t.id}>
-                <tr style={{ opacity: t.status === "cancelled" ? 0.5 : 1 }}>
+                <motion.tr style={{ opacity: t.status === "cancelled" ? 0.5 : 1 }} variants={staggerItemVariants}>
                   <td data-label="Naam">
                     <div style={{ fontWeight: 600, color: "var(--text)" }}>{t.name}</div>
                     <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 3 }}>
@@ -70,14 +73,25 @@ export function ToolsClient(props: { initialTools: Tool[] }) {
                   <td data-label="Vervalt">{t.renews_on ? new Date(t.renews_on).toLocaleDateString("nl-BE") : "—"}</td>
                   <td data-label="Beheerder">{t.account_owner ? (PEOPLE_NAME[t.account_owner] ?? t.account_owner) : "—"}</td>
                   <td style={{ textAlign: "right" }}><button className="icon-btn" onClick={() => setEditToolId(editToolId === t.id ? null : t.id)} aria-label="Bewerk">✎</button></td>
-                </tr>
+                </motion.tr>
                 {editToolId === t.id && (
-                  <tr><td colSpan={5}><ToolForm tool={t} onCancel={() => setEditToolId(null)} onSave={(patch) => saveTool(t, patch)} /></td></tr>
+                  <tr>
+                    <td colSpan={5}>
+                      {/* Tabel-layout reflowt de hele tabel op elk animatieframe, dus
+                          hier bewust alleen een opacity-fade i.p.v. een hoogte-animatie
+                          (die bij Pipeline/Taken/Wiki wel via AnimatedDisclosure loopt). */}
+                      <AnimatePresence>
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.15 }}>
+                          <ToolForm tool={t} onCancel={() => setEditToolId(null)} onSave={(patch) => saveTool(t, patch)} />
+                        </motion.div>
+                      </AnimatePresence>
+                    </td>
+                  </tr>
                 )}
               </Fragment>
             ))}
             {tools.length === 0 && <tr><td colSpan={5} style={{ fontStyle: "italic", color: "var(--text-faint)" }}>Nog niks toegevoegd.</td></tr>}
-          </tbody>
+          </motion.tbody>
         </table>
       </div>
       <ToolCreateForm onSubmit={createTool} />
