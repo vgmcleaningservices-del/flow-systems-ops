@@ -198,6 +198,26 @@ function MatthiasOverview(props: {
     <>
       <p className="section-sub">Laatste activiteit: <b>{relTime(props.lastActivityIso)}</b></p>
 
+      <div className="section-head"><span className="section-title">Financieel</span></div>
+      <p className="section-sub">Alles wat met geld te maken heeft, in één oogopslag</p>
+      <motion.div className="telemetry" variants={staggerContainerVariants} initial="hidden" animate="show">
+        <TiltCard className="tile" variants={staggerItemVariants}>
+          <div className="tile-label"><span>Tool-kosten / maand</span></div>
+          <div className="tile-value">{fmtEUR(monthlyToolsCost)}</div>
+          <div className="tile-foot">{activeTools.length} actieve {activeTools.length === 1 ? "tool" : "tools"} · <Link href="/tools" style={{ color: "var(--accent)" }}>bekijk →</Link></div>
+        </TiltCard>
+        <TiltCard className="tile" variants={staggerItemVariants}>
+          <div className="tile-label"><span>Eenmalige betalingen</span></div>
+          <div className="tile-value">{fmtEUR(oneTimeToolsCost)}</div>
+          <div className="tile-foot">{oneTimeTools.length} eenmalige {oneTimeTools.length === 1 ? "betaling" : "betalingen"} · <Link href="/tools" style={{ color: "var(--accent)" }}>bekijk →</Link></div>
+        </TiltCard>
+        <TiltCard className="tile" variants={staggerItemVariants}>
+          <div className="tile-label"><span>Totaal uitbetaald</span></div>
+          <div className="tile-value">{fmtEUR(totalPayouts)}</div>
+          <div className="tile-foot">{payouts.length} {payouts.length === 1 ? "uitbetaling" : "uitbetalingen"} gelogd · <Link href="/uitbetalingen" style={{ color: "var(--accent)" }}>bekijk →</Link></div>
+        </TiltCard>
+      </motion.div>
+
       <div className="section-head"><span className="section-title">Overzicht</span></div>
       <motion.div className="telemetry cols-2" variants={staggerContainerVariants} initial="hidden" animate="show">
         <TiltCard className="tile" variants={staggerItemVariants}>
@@ -221,26 +241,6 @@ function MatthiasOverview(props: {
           <div className="tile-label"><span>Eerstvolgende tool-vervaldatum</span></div>
           <div className="tile-value" style={{ fontSize: 22 }}>{nextRenewal ? new Date(nextRenewal.renews_on!).toLocaleDateString("nl-BE") : "—"}</div>
           <div className="tile-foot">{nextRenewal ? nextRenewal.name : "niks gepland"}</div>
-        </TiltCard>
-      </motion.div>
-
-      <div className="section-head"><span className="section-title">Financieel</span></div>
-      <p className="section-sub">Alles wat met geld te maken heeft, in één oogopslag</p>
-      <motion.div className="telemetry" variants={staggerContainerVariants} initial="hidden" animate="show">
-        <TiltCard className="tile" variants={staggerItemVariants}>
-          <div className="tile-label"><span>Tool-kosten / maand</span></div>
-          <div className="tile-value">{fmtEUR(monthlyToolsCost)}</div>
-          <div className="tile-foot">{activeTools.length} actieve {activeTools.length === 1 ? "tool" : "tools"} · <Link href="/tools" style={{ color: "var(--accent)" }}>bekijk →</Link></div>
-        </TiltCard>
-        <TiltCard className="tile" variants={staggerItemVariants}>
-          <div className="tile-label"><span>Eenmalige betalingen</span></div>
-          <div className="tile-value">{fmtEUR(oneTimeToolsCost)}</div>
-          <div className="tile-foot">{oneTimeTools.length} eenmalige {oneTimeTools.length === 1 ? "betaling" : "betalingen"} · <Link href="/tools" style={{ color: "var(--accent)" }}>bekijk →</Link></div>
-        </TiltCard>
-        <TiltCard className="tile" variants={staggerItemVariants}>
-          <div className="tile-label"><span>Totaal uitbetaald</span></div>
-          <div className="tile-value">{fmtEUR(totalPayouts)}</div>
-          <div className="tile-foot">{payouts.length} {payouts.length === 1 ? "uitbetaling" : "uitbetalingen"} gelogd · <Link href="/uitbetalingen" style={{ color: "var(--accent)" }}>bekijk →</Link></div>
         </TiltCard>
       </motion.div>
 
