@@ -58,6 +58,7 @@ git push -u origin main
    | `TEAM_ACCESS_CODE` | een code die je hele team gebruikt om in te loggen, bv. `flowsystems2026` |
    | `SESSION_SECRET` | een lange willekeurige string — genereer er een met `openssl rand -hex 32`, of typ zelf 40+ willekeurige tekens |
    | `GITHUB_WEBHOOK_SECRET` | nog een willekeurige string — deze plak je zo dadelijk óók in elke GitHub-webhook |
+   | `ANTHROPIC_API_KEY` | optioneel — sleutel van https://console.anthropic.com. Zonder deze key werkt alles gewoon, maar mis je de automatische samenvatting-in-mensentaal van git-activiteit op Squad Status |
 
 3. Klik **Deploy**. Na ~1 minuut krijg je een URL zoals `https://flow-systems-ops.vercel.app`.
 
