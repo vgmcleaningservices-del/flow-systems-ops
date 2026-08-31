@@ -1,123 +1,18 @@
 "use client";
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { ALL_PEOPLE } from "@/lib/people";
-
-type CrewStatus = "waiting" | "active" | "bottleneck" | "auto";
-type Stage = "scouting" | "sprint" | "exit-ready";
-type TaskStatus = "todo" | "in_progress" | "handed_off" | "done";
-
-interface Crew {
-  id: string; name: string; rank: string; role: string;
-  github_username: string | null; status: CrewStatus; task: string; note: string;
-  current_venture_id: string | null;
-}
-interface Venture {
-  id: string; name: string; stage: Stage; price: string; feature: string;
-  repo_done: boolean; domein_done: boolean; stripe_done: boolean;
-  github_repo: string | null; pitched_by: string | null;
-  mrr: number; mrr_prev: number; sprint_deadline: string | null; sprint_label: string;
-  mrr_source_url: string | null; mrr_synced_at: string | null; notion_url: string | null;
-}
-interface CommitRow { id: number; repo: string; venture_id: string | null; crew_id: string | null; sha: string; message: string; author: string; pass_to: string | null; ts: string; }
-interface Directive { id: number; venture_id: string | null; author: string; type: "directive" | "veto"; text: string; ts: string; }
-interface CrewEvent { id: number; crew_id: string; venture_id: string | null; from_status: string | null; to_status: string; source: string; ts: string; }
-interface Metric { id: number; crew_id: string; venture_id: string | null; label: string; value: number; period: string; note: string | null; created_at: string; }
-interface Payout { id: number; crew_id: string; venture_id: string | null; amount: number; note: string | null; paid_at: string; recorded_by: string; }
-type TaskPriority = "low" | "normal" | "high" | "urgent";
-interface Task {
-  id: number; venture_id: string; title: string; description: string; status: TaskStatus;
-  priority: TaskPriority; due_date: string | null; parent_task_id: number | null;
-  created_by: string; assigned_to: string; handed_off_by: string | null; handed_off_at: string | null;
-  created_at: string; updated_at: string;
-}
-type BillingCycle = "maandelijks" | "jaarlijks" | "eenmalig";
-type ToolStatus = "active" | "cancelled";
-interface Tool {
-  id: number; name: string; category: string; url: string | null; cost: number;
-  billing_cycle: BillingCycle; renews_on: string | null; account_owner: string | null;
-  notes: string; status: ToolStatus; created_at: string; updated_at: string;
-}
-interface WikiPage {
-  id: number; venture_id: string | null; title: string; content: string;
-  created_by: string; updated_by: string | null; created_at: string; updated_at: string;
-}
-
-const STATUS_LABEL: Record<CrewStatus, string> = { waiting: "Wachtend", active: "Geïsoleerd · Actief", bottleneck: "Active Bottleneck", auto: "Geautomatiseerd" };
-const STATUS_TAG: Record<CrewStatus, string> = { waiting: "t-waiting", active: "t-active", bottleneck: "t-bottleneck", auto: "t-auto" };
-const STAGE_LABEL: Record<Stage, string> = { scouting: "Concept / Scouting", sprint: "Actieve Sprint (72u)", "exit-ready": "Exit Ready" };
-const TASK_STATUSES: TaskStatus[] = ["todo", "in_progress", "handed_off", "done"];
-const TASK_STATUS_LABEL: Record<TaskStatus, string> = { todo: "Te doen", in_progress: "Bezig", handed_off: "Doorgegeven", done: "Klaar" };
-const TASK_STATUS_TAG: Record<TaskStatus, string> = { todo: "t-todo", in_progress: "t-in_progress", handed_off: "t-handed_off", done: "t-done" };
-// Elke kolom een eigen betekenisvolle kleur (zelfde semantiek als de rest van dit
-// dashboard: idle = nog niet begonnen, accent = actief werk, warn = wacht op
-// oppak-actie, good = klaar) -- niet zomaar 4 willekeurige tinten.
-const TASK_COLOR: Record<TaskStatus, string> = { todo: "var(--idle)", in_progress: "var(--accent)", handed_off: "var(--warn)", done: "var(--good)" };
-const TASK_PRIORITIES: TaskPriority[] = ["low", "normal", "high", "urgent"];
-const TASK_PRIORITY_LABEL: Record<TaskPriority, string> = { low: "Laag", normal: "Normaal", high: "Hoog", urgent: "Urgent" };
-const TASK_PRIORITY_TAG: Record<TaskPriority, string> = { low: "t-p-low", normal: "t-p-normal", high: "t-p-high", urgent: "t-p-urgent" };
-const PEOPLE_NAME: Record<string, string> = Object.fromEntries(ALL_PEOPLE.map((p) => [p.id, p.name]));
-const TOOL_CATEGORIES = ["hosting", "database", "payments", "ai", "communicatie", "domein", "overig"] as const;
-const TOOL_CATEGORY_LABEL: Record<string, string> = {
-  hosting: "Hosting", database: "Database", payments: "Payments", ai: "AI",
-  communicatie: "Communicatie", domein: "Domein", overig: "Overig",
-};
-const BILLING_LABEL: Record<BillingCycle, string> = { maandelijks: "/ maand", jaarlijks: "/ jaar", eenmalig: "eenmalig" };
-const METRIC_LABELS: Record<string, string> = {
-  outreach_contacted: "Outreach — contacted",
-  outreach_replies: "Outreach — replies",
-  outreach_meetings: "Outreach — meetings",
-  ideas_pitched: "Ideeën gepitcht",
-  other: "Overig",
-};
-
-function pad(n: number) { return String(n).padStart(2, "0"); }
-function fmtEUR(n: number) { return "€" + Math.round(n).toLocaleString("nl-BE"); }
-function relTime(iso: string | null) {
-  if (!iso) return "nog nooit";
-  const diff = Math.max(0, Date.now() - new Date(iso).getTime());
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return "zonet";
-  if (m < 60) return m + " min geleden";
-  const h = Math.floor(m / 60);
-  if (h < 24) return h + " u geleden";
-  return Math.floor(h / 24) + " dagen geleden";
-}
-// Kleine, zelfgeschreven renderer voor wiki-content -- geen dependency zoals
-// react-markdown nodig voor wat 5 mensen aan interne notities bijhouden.
-// Ondersteunt: # / ## koppen, **vet**, "- " bullets, auto-linked URLs.
-// Rendert als React-nodes (nooit dangerouslySetInnerHTML).
-function renderInline(text: string, keyPrefix: string): ReactNode[] {
-  const parts = text.split(/(\*\*[^*]+\*\*|https?:\/\/\S+)/g);
-  return parts.filter(Boolean).map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={`${keyPrefix}-${i}`}>{part.slice(2, -2)}</strong>;
-    }
-    if (/^https?:\/\//.test(part)) {
-      return <a key={`${keyPrefix}-${i}`} href={part} target="_blank" rel="noreferrer">{part}</a>;
-    }
-    return <span key={`${keyPrefix}-${i}`}>{part}</span>;
-  });
-}
-function renderWikiContent(content: string): ReactNode {
-  const lines = content.split("\n");
-  return lines.map((line, i) => {
-    const key = `l${i}`;
-    if (line.startsWith("## ")) return <h4 key={key} style={{ margin: "14px 0 4px" }}>{renderInline(line.slice(3), key)}</h4>;
-    if (line.startsWith("# ")) return <h3 key={key} style={{ margin: "16px 0 6px" }}>{renderInline(line.slice(2), key)}</h3>;
-    if (line.startsWith("- ")) return <div key={key} style={{ paddingLeft: 16 }}>• {renderInline(line.slice(2), key)}</div>;
-    if (line.trim() === "") return <br key={key} />;
-    return <div key={key}>{renderInline(line, key)}</div>;
-  });
-}
-function isoWeek(d: Date) {
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const day = date.getUTCDay() || 7;
-  date.setUTCDate(date.getUTCDate() + 4 - day);
-  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  return `${date.getUTCFullYear()}-W${pad(week)}`;
-}
+import { post, logout } from "@/lib/api-client";
+import type {
+  Crew, Venture, CommitRow, Directive, CrewEvent, Metric, Payout,
+  CrewStatus, Stage, TaskStatus, TaskPriority, Task, BillingCycle, ToolStatus, Tool, WikiPage,
+} from "@/lib/dashboard-types";
+import {
+  STATUS_LABEL, STATUS_TAG, STAGE_LABEL, TASK_STATUSES, TASK_STATUS_LABEL, TASK_STATUS_TAG,
+  TASK_COLOR, TASK_PRIORITIES, TASK_PRIORITY_LABEL, TASK_PRIORITY_TAG, PEOPLE_NAME,
+  TOOL_CATEGORIES, TOOL_CATEGORY_LABEL, BILLING_LABEL, METRIC_LABELS,
+} from "@/lib/dashboard-constants";
+import { pad, fmtEUR, relTime, renderWikiContent, isoWeek } from "@/lib/dashboard-format";
 
 export default function Dashboard(props: {
   initialMe: string | null;
@@ -197,16 +92,6 @@ export default function Dashboard(props: {
       .subscribe();
     return () => { supabaseBrowser.removeChannel(channel); };
   }, []);
-
-  async function post(url: string, body: unknown) {
-    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (!res.ok) window.alert("Opslaan mislukt — probeer opnieuw.");
-    return res.ok;
-  }
-  async function logout() {
-    await fetch("/api/logout", { method: "POST" });
-    window.location.href = "/login";
-  }
 
   const ventureName = (id: string | null) => (id ? ventures.find((v) => v.id === id)?.name ?? id : null);
   const owner = crew.find((c) => c.status === "bottleneck");
