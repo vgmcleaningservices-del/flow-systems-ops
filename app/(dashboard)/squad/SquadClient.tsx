@@ -5,7 +5,7 @@ import { supabaseBrowser } from "@/lib/supabaseClient";
 import { post } from "@/lib/api-client";
 import type { Crew, CrewStatus, CommitRow, Venture } from "@/lib/dashboard-types";
 import { STATUS_LABEL, STATUS_TAG } from "@/lib/dashboard-constants";
-import { staggerContainerVariants, staggerItemVariants } from "../_components/motion";
+import { staggerContainerVariants, staggerItemVariants, TiltCard } from "../_components/motion";
 import { CrewForm } from "./CrewForm";
 
 export function SquadClient(props: { initialCrew: Crew[]; initialVentures: Venture[]; initialCommits: CommitRow[] }) {
@@ -52,7 +52,7 @@ export function SquadClient(props: { initialCrew: Crew[]; initialVentures: Ventu
       )}
       <motion.div className="crew-list" variants={staggerContainerVariants} initial="hidden" animate="show">
         {crew.map((c) => (
-          <motion.div key={c.id} className={"crew-card" + (c.status === "bottleneck" ? " bottleneck" : "")} variants={staggerItemVariants}>
+          <TiltCard key={c.id} className={"crew-card" + (c.status === "bottleneck" ? " bottleneck" : "")} variants={staggerItemVariants}>
             <div className="crew-top">
               <span className="rank-badge">{c.rank}</span>
               <div>
@@ -67,9 +67,9 @@ export function SquadClient(props: { initialCrew: Crew[]; initialVentures: Ventu
               </div>
             </div>
             {editCrewId === c.id && <CrewForm crew={c} ventures={ventures} onCancel={() => setEditCrewId(null)} onSave={(s, t, n, vid) => saveCrew(c, s, t, n, vid)} />}
-          </motion.div>
+          </TiltCard>
         ))}
-        <motion.div className="crew-card vacant" variants={staggerItemVariants}>
+        <TiltCard className="crew-card vacant" variants={staggerItemVariants}>
           <div className="crew-top">
             <span className="rank-badge" style={{ background: "var(--idle)", color: "#0a0b0d" }}>—</span>
             <div>
@@ -79,7 +79,7 @@ export function SquadClient(props: { initialCrew: Crew[]; initialVentures: Ventu
             </div>
             <span className="tag t-auto">Geautomatiseerd</span>
           </div>
-        </motion.div>
+        </TiltCard>
       </motion.div>
 
       <div className="form-inline" style={{ marginTop: 18, marginBottom: 0 }}>

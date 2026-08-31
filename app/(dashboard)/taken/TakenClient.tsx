@@ -7,7 +7,7 @@ import type { Crew, Task, TaskPriority, TaskStatus, Venture } from "@/lib/dashbo
 import { TASK_STATUSES, TASK_STATUS_LABEL, TASK_COLOR, TASK_PRIORITIES, TASK_PRIORITY_LABEL, TASK_PRIORITY_TAG, PEOPLE_NAME } from "@/lib/dashboard-constants";
 import { pad, relTime } from "@/lib/dashboard-format";
 import { ForYouList } from "../_components/ForYouList";
-import { AnimatedDisclosure, staggerContainerVariants, staggerItemVariants } from "../_components/motion";
+import { AnimatedDisclosure, staggerContainerVariants, staggerItemVariants, TiltCard } from "../_components/motion";
 import { TaskForm } from "./TaskForm";
 import { TaskCreateForm } from "./TaskCreateForm";
 
@@ -101,7 +101,7 @@ export function TakenClient(props: { initialMe: string; initialTasks: Task[]; in
                 const isOverdue = !!t.due_date && t.due_date < todayStr && t.status !== "done";
                 const isDueSoon = !!t.due_date && !isOverdue && t.due_date <= dueSoonCutoff;
                 return (
-                <motion.div className="app-card" style={{ borderLeft: `3px solid ${TASK_COLOR[t.status]}` }} key={t.id} variants={staggerItemVariants}>
+                <TiltCard className="app-card" style={{ borderLeft: `3px solid ${TASK_COLOR[t.status]}` }} key={t.id} variants={staggerItemVariants}>
                   <div className="app-head" onClick={() => setOpenTaskId(openTaskId === t.id ? null : t.id)}>
                     <span className="app-name-row">
                       <span className="app-name">{t.title}</span>
@@ -142,7 +142,7 @@ export function TakenClient(props: { initialMe: string; initialTasks: Task[]; in
                       </div>
                     )}
                   </AnimatedDisclosure>
-                </motion.div>
+                </TiltCard>
                 );
               })}
               {boardTasks.filter((t) => t.status === stage).length === 0 && <div className="col-empty">—</div>}

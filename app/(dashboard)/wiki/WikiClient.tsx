@@ -6,7 +6,7 @@ import { post } from "@/lib/api-client";
 import type { Venture, WikiPage } from "@/lib/dashboard-types";
 import { PEOPLE_NAME } from "@/lib/dashboard-constants";
 import { relTime, renderWikiContent } from "@/lib/dashboard-format";
-import { AnimatedDisclosure, staggerContainerVariants, staggerItemVariants } from "../_components/motion";
+import { AnimatedDisclosure, staggerContainerVariants, staggerItemVariants, TiltCard } from "../_components/motion";
 import { WikiPageForm } from "./WikiPageForm";
 import { WikiCreateForm } from "./WikiCreateForm";
 
@@ -46,7 +46,7 @@ export function WikiClient(props: { initialMe: string; initialWikiPages: WikiPag
       <p className="section-sub">Gedeelde kennisbank — algemene pagina&apos;s of per venture</p>
       <motion.div className="col-body" variants={staggerContainerVariants} initial="hidden" animate="show">
         {wikiPages.map((w) => (
-          <motion.div className="app-card" key={w.id} variants={staggerItemVariants}>
+          <TiltCard className="app-card" key={w.id} variants={staggerItemVariants}>
             <div className="app-head" onClick={() => setOpenWikiId(openWikiId === w.id ? null : w.id)}>
               <span className="app-name-row">
                 <span className="app-name">{w.title}</span>
@@ -68,7 +68,7 @@ export function WikiClient(props: { initialMe: string; initialWikiPages: WikiPag
                 </div>
               )}
             </AnimatedDisclosure>
-          </motion.div>
+          </TiltCard>
         ))}
         {wikiPages.length === 0 && <div className="col-empty">Nog geen pagina&apos;s.</div>}
       </motion.div>

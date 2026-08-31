@@ -6,7 +6,7 @@ import { post } from "@/lib/api-client";
 import type { Crew, Venture } from "@/lib/dashboard-types";
 import { STAGE_LABEL } from "@/lib/dashboard-constants";
 import { pad } from "@/lib/dashboard-format";
-import { AnimatedDisclosure, staggerContainerVariants, staggerItemVariants } from "../_components/motion";
+import { AnimatedDisclosure, staggerContainerVariants, staggerItemVariants, TiltCard } from "../_components/motion";
 import { VentureForm } from "./VentureForm";
 
 export function PipelineClient(props: { initialVentures: Venture[]; initialCrew: Crew[] }) {
@@ -41,7 +41,7 @@ export function PipelineClient(props: { initialVentures: Venture[]; initialCrew:
             <div className="col-head"><b>{pad(idx + 1)}</b> {STAGE_LABEL[stage]}</div>
             <motion.div className="col-body" variants={staggerContainerVariants} initial="hidden" animate="show">
               {ventures.filter((v) => v.stage === stage).map((v) => (
-                <motion.div className="app-card" key={v.id} variants={staggerItemVariants}>
+                <TiltCard className="app-card" key={v.id} variants={staggerItemVariants}>
                   <div className="app-head" onClick={() => setOpenVentureId(openVentureId === v.id ? null : v.id)}>
                     <span className="app-name-row"><span className="app-name">{v.name}</span>{v.stage === "sprint" && <span className="app-badge">In Productie</span>}</span>
                     <span className={"chev" + (openVentureId === v.id ? " open" : "")}>⌄</span>
@@ -64,7 +64,7 @@ export function PipelineClient(props: { initialVentures: Venture[]; initialCrew:
                       </div>
                     )}
                   </AnimatedDisclosure>
-                </motion.div>
+                </TiltCard>
               ))}
             </motion.div>
           </div>
