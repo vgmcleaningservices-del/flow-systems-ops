@@ -157,9 +157,40 @@ a { color: inherit; }
 
 .identity { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-faint); }
 
+/* ---------- app shell: sidebar (desktop) + drawer (mobile) ---------- */
+.app-shell { display: flex; gap: 24px; align-items: flex-start; }
+.sidebar {
+  width: 220px; flex-shrink: 0; position: sticky; top: 20px;
+  display: flex; flex-direction: column; gap: 4px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 18px 14px; box-shadow: var(--shadow-sm);
+}
+.sidebar-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; }
+.sidebar-nav a {
+  text-decoration: none; color: var(--text-dim); font-size: var(--text-base);
+  font-weight: 590; padding: 9px 12px; border-radius: var(--radius-sm);
+}
+.sidebar-nav a:hover { background: var(--surface-3); color: var(--text); }
+.sidebar-nav a.active { background: var(--accent-dim); color: var(--accent); font-weight: 650; }
+.sidebar-section-label {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-faint); margin: 14px 12px 4px;
+}
+.app-main { flex: 1; min-width: 0; }
+/* Topbar brand is only needed once the sidebar (which already shows it) hides.
+   Scoped to .app-shell so the still-live single-page Dashboard (no sidebar,
+   until its cutover step) keeps showing its own topbar brand as before. */
+.app-shell .topbar > .brand { display: none; }
+@media (max-width: 880px) {
+  .sidebar { display: none; }
+  .app-shell { display: block; }
+  .app-shell .topbar > .brand { display: flex; }
+}
+
 /* ---------- mobile section nav ---------- */
 /* No in-page navigation existed at all -- 9 sections were one long scroll
-   with no way to jump. Desktop-hidden; mobile gets a floating jump-menu. */
+   with no way to jump. Desktop has the sidebar; below its breakpoint (880px)
+   this floating jump-menu takes over so there's never a gap with zero nav. */
 .mobile-nav-btn {
   display: none; position: fixed; bottom: 20px; right: 20px; z-index: 40;
   width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--border);
@@ -172,12 +203,16 @@ a { color: inherit; }
   box-shadow: var(--shadow-hover); padding: 8px; display: flex; flex-direction: column; gap: 2px;
   max-height: 60vh; overflow-y: auto; min-width: 200px;
 }
-.mobile-nav-popover a {
+.mobile-nav-popover .sidebar-nav { margin-top: 0; }
+/* Still used directly by the not-yet-migrated single-page Dashboard's own
+   anchor-jump popover (raw <a> tags, no .sidebar-nav wrapper) until its
+   cutover step removes that component. */
+.mobile-nav-popover > a {
   text-decoration: none; color: var(--text-dim); font-size: var(--text-base); font-weight: 590;
   padding: 9px 12px; border-radius: var(--radius-sm); display: block;
 }
-.mobile-nav-popover a:hover { background: var(--surface-3); color: var(--text); }
-@media (max-width: 640px) { .mobile-nav-btn { display: flex; } }
+.mobile-nav-popover > a:hover { background: var(--surface-3); color: var(--text); }
+@media (max-width: 880px) { .mobile-nav-btn { display: flex; } }
 select, input.field, textarea.field {
   background: var(--surface-3); border: 1px solid var(--border); color: var(--text);
   font-family: var(--font-sans); font-size: var(--text-base); border-radius: var(--radius-sm); padding: 8px 11px;
