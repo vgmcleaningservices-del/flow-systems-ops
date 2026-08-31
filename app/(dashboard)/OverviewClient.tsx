@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { AnimatePresence } from "motion/react";
 import * as motion from "motion/react-client";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { post } from "@/lib/api-client";
@@ -8,7 +9,7 @@ import type { Crew, Task, Tool, Venture, WikiPage } from "@/lib/dashboard-types"
 import { fmtEUR, pad, relTime } from "@/lib/dashboard-format";
 import { STAGE_LABEL } from "@/lib/dashboard-constants";
 import { ForYouList } from "./_components/ForYouList";
-import { staggerContainerVariants, staggerItemVariants } from "./_components/motion";
+import { staggerContainerVariants, staggerItemVariants, TiltCard } from "./_components/motion";
 import { MrrForm } from "./MrrForm";
 
 // Telt op vanaf 0 alleen bij de allereerste mount -- de KPI-waarden komen uit
@@ -158,6 +159,11 @@ function MatthiasOverview(props: {
   const animatedBottlenecks = useCountUp(bottleneckCount);
   const activeTools = tools.filter((t) => t.status === "active");
   const nextRenewal = [...activeTools].filter((t) => t.renews_on).sort((a, b) => (a.renews_on! < b.renews_on! ? -1 : 1))[0] ?? null;
+  // Eén datapunt laten opvallen i.p.v. overal kleur -- zelfde spaarzame
+  // accent-highlight die op mobit.framer.website één balk in een staafdiagram
+  // liet opvallen, hier de venture met de hoogste MRR.
+  const topMrrVenture = [...ventures].sort((a, b) => b.mrr - a.mrr)[0];
+  const topMrrVentureId = topMrrVenture && topMrrVenture.mrr > 0 ? topMrrVenture.id : null;
 
   async function saveMrr(ventureId: string, val: number) {
     await post("/api/venture", { id: ventureId, mrr: val });
@@ -179,28 +185,28 @@ function MatthiasOverview(props: {
 
       <div className="section-head"><span className="section-title">Overzicht</span></div>
       <motion.div className="telemetry cols-2" variants={staggerContainerVariants} initial="hidden" animate="show">
-        <motion.div className="tile" variants={staggerItemVariants}>
+        <TiltCard className="tile" variants={staggerItemVariants}>
           <div className="tile-label"><span>Holding MRR</span></div>
           <div className="tile-value">{fmtEUR(animatedMrr)}
             {totalMrrPrev > 0 && <span className={"tile-delta " + (totalMrrPrev <= totalMrr ? "up" : "down")}>{totalMrrPrev <= totalMrr ? "▲" : "▼"} {Math.abs(((totalMrr - totalMrrPrev) / totalMrrPrev) * 100).toFixed(1)}%</span>}
           </div>
           <div className="tile-foot">Som van {ventures.length} ventures</div>
-        </motion.div>
-        <motion.div className="tile" variants={staggerItemVariants}>
+        </TiltCard>
+        <TiltCard className="tile" variants={staggerItemVariants}>
           <div className="tile-label"><span>Open taken</span></div>
           <div className="tile-value">{animatedOpenTasks}</div>
           <div className="tile-foot">bedrijfsbreed, alle ventures</div>
-        </motion.div>
-        <motion.div className={"tile" + (bottleneckCount > 0 ? " tile-urgent" : "")} variants={staggerItemVariants}>
+        </TiltCard>
+        <TiltCard className={"tile" + (bottleneckCount > 0 ? " tile-urgent" : "")} variants={staggerItemVariants}>
           <div className="tile-label"><span>Bottlenecks</span></div>
           <div className={"tile-value" + (bottleneckCount > 0 ? " critical-color" : "")}>{animatedBottlenecks}</div>
           <div className="tile-foot">{bottleneckCount > 0 ? "wacht op oppak-actie" : "pipeline vrij"}</div>
-        </motion.div>
-        <motion.div className="tile" variants={staggerItemVariants}>
+        </TiltCard>
+        <TiltCard className="tile" variants={staggerItemVariants}>
           <div className="tile-label"><span>Eerstvolgende tool-vervaldatum</span></div>
           <div className="tile-value" style={{ fontSize: 22 }}>{nextRenewal ? new Date(nextRenewal.renews_on!).toLocaleDateString("nl-BE") : "—"}</div>
           <div className="tile-foot">{nextRenewal ? nextRenewal.name : "niks gepland"}</div>
-        </motion.div>
+        </TiltCard>
       </motion.div>
 
       <div className="section-head"><span className="section-title">Alles-oké? — Venture Overzicht</span></div>
@@ -216,54 +222,68 @@ function MatthiasOverview(props: {
           else if (v.stage === "sprint" && workers.length === 0) { cls = "status-warn"; label = "Stil — niemand actief"; }
           else if (v.stage === "sprint") { cls = "status-good"; label = "Loopt"; }
           return (
-            <motion.button key={v.id} className={`venture-chip ${cls} ${selectedVentureId === v.id ? "selected" : ""}`} variants={staggerItemVariants} onClick={() => setSelectedVentureId(selectedVentureId === v.id ? null : v.id)}>
+            <TiltCard
+              as="button" key={v.id}
+              className={`venture-chip ${cls} ${selectedVentureId === v.id ? "selected" : ""} ${v.id === topMrrVentureId ? "striped-accent" : ""}`}
+              variants={staggerItemVariants}
+              onClick={() => setSelectedVentureId(selectedVentureId === v.id ? null : v.id)}
+            >
               <div className="vc-name">{v.name}</div>
               <div className="vc-stage">{STAGE_LABEL[v.stage]}</div>
               {v.mrr > 0 && <div className="vc-mrr">{fmtEUR(v.mrr)}{v.mrr_source_url && <span className="vc-live">live</span>}</div>}
               <div className="vc-status-label">{label}</div>
               <div className="vc-who">{workers.length ? workers.map((w) => w.name).join(", ") : "niemand actief"}</div>
-            </motion.button>
+            </TiltCard>
           );
         })}
       </motion.div>
 
       <div className="section-head"><span className="section-title">Telemetrie{selectedVenture ? ` — ${selectedVenture.name}` : ""}</span></div>
       <p className="section-sub">{selectedVenture ? "MRR van deze venture" : "Holding-MRR — som van alle dochterbedrijven"}</p>
-      <motion.div className="telemetry" variants={staggerContainerVariants} initial="hidden" animate="show">
-        <motion.div className="tile" variants={staggerItemVariants}>
-          <div className="tile-label">
-            <span>{selectedVenture ? "Venture MRR" : "Holding MRR"}</span>
-            <span style={{ display: "flex", gap: 4 }}>
-              <button className="icon-btn" onClick={syncMrr} disabled={syncingMrr} aria-label="Sync live MRR via Stripe" title="Haal live MRR op via Stripe">{syncingMrr ? "…" : "⟳"}</button>
-              {selectedVenture && <button className="icon-btn" onClick={() => setEditMrrVentureId(selectedVenture.id)} aria-label="Bewerk MRR">✎</button>}
-            </span>
-          </div>
-          {editMrrVentureId && selectedVenture ? (
-            <MrrForm initial={selectedVenture.mrr} onCancel={() => setEditMrrVentureId(null)} onSave={(v) => saveMrr(selectedVenture.id, v)} />
-          ) : (
-            <div className="tile-value">{fmtEUR(mrr)}
-              {mrrPrev > 0 && <span className={"tile-delta " + (deltaPct >= 0 ? "up" : "down")}>{deltaPct >= 0 ? "▲" : "▼"} {Math.abs(deltaPct).toFixed(1)}%</span>}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={selectedVentureId ?? "all"}
+          className="telemetry"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+        >
+          <TiltCard className="tile">
+            <div className="tile-label">
+              <span>{selectedVenture ? "Venture MRR" : "Holding MRR"}</span>
+              <span style={{ display: "flex", gap: 4 }}>
+                <button className="icon-btn" onClick={syncMrr} disabled={syncingMrr} aria-label="Sync live MRR via Stripe" title="Haal live MRR op via Stripe">{syncingMrr ? "…" : "⟳"}</button>
+                {selectedVenture && <button className="icon-btn" onClick={() => setEditMrrVentureId(selectedVenture.id)} aria-label="Bewerk MRR">✎</button>}
+              </span>
             </div>
-          )}
-          <div className="tile-foot">
-            {selectedVenture
-              ? selectedVenture.mrr_source_url
-                ? `Live via Stripe · gesynct ${relTime(selectedVenture.mrr_synced_at)}`
-                : "Klik ✎ om bij te werken"
-              : `Som van ${ventures.length} ventures${ventures.some((v) => v.mrr_source_url) ? ` · ${ventures.filter((v) => v.mrr_source_url).length} live via Stripe` : ""}`}
-          </div>
+            {editMrrVentureId && selectedVenture ? (
+              <MrrForm initial={selectedVenture.mrr} onCancel={() => setEditMrrVentureId(null)} onSave={(v) => saveMrr(selectedVenture.id, v)} />
+            ) : (
+              <div className="tile-value">{fmtEUR(mrr)}
+                {mrrPrev > 0 && <span className={"tile-delta " + (deltaPct >= 0 ? "up" : "down")}>{deltaPct >= 0 ? "▲" : "▼"} {Math.abs(deltaPct).toFixed(1)}%</span>}
+              </div>
+            )}
+            <div className="tile-foot">
+              {selectedVenture
+                ? selectedVenture.mrr_source_url
+                  ? `Live via Stripe · gesynct ${relTime(selectedVenture.mrr_synced_at)}`
+                  : "Klik ✎ om bij te werken"
+                : `Som van ${ventures.length} ventures${ventures.some((v) => v.mrr_source_url) ? ` · ${ventures.filter((v) => v.mrr_source_url).length} live via Stripe` : ""}`}
+            </div>
+          </TiltCard>
+          <TiltCard className="tile">
+            <div className="tile-label"><span>Projected Exit Waardering</span></div>
+            <div className="tile-value accent-color">{fmtEUR(exit)}</div>
+            <div className="tile-foot">MRR × <b>4.5</b> multiple</div>
+          </TiltCard>
+          <TiltCard className={"tile" + (urgent ? " tile-urgent striped-accent" : "")}>
+            <div className="tile-label"><span>72u Sprint Klok</span></div>
+            <div className={"tile-value" + (urgent ? " critical-color" : "")}>{clockText}</div>
+            <div className="tile-foot">{clockFoot}<button className="btn ghost" style={{ marginLeft: "auto" }} onClick={resetSprint}>Start nieuwe 72u sprint</button></div>
+          </TiltCard>
         </motion.div>
-        <motion.div className="tile" variants={staggerItemVariants}>
-          <div className="tile-label"><span>Projected Exit Waardering</span></div>
-          <div className="tile-value accent-color">{fmtEUR(exit)}</div>
-          <div className="tile-foot">MRR × <b>4.5</b> multiple</div>
-        </motion.div>
-        <motion.div className={"tile" + (urgent ? " tile-urgent" : "")} variants={staggerItemVariants}>
-          <div className="tile-label"><span>72u Sprint Klok</span></div>
-          <div className={"tile-value" + (urgent ? " critical-color" : "")}>{clockText}</div>
-          <div className="tile-foot">{clockFoot}<button className="btn ghost" style={{ marginLeft: "auto" }} onClick={resetSprint}>Start nieuwe 72u sprint</button></div>
-        </motion.div>
-      </motion.div>
+      </AnimatePresence>
     </>
   );
 }
