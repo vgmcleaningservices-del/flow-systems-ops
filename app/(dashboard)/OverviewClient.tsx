@@ -55,12 +55,7 @@ type OverviewProps =
     };
 
 export function OverviewClient(props: OverviewProps) {
-  return (
-    <>
-      <WorkflowCard />
-      {props.variant === "matthias" ? <MatthiasOverview {...props} /> : <TeamOverview {...props} />}
-    </>
-  );
+  return props.variant === "matthias" ? <MatthiasOverview {...props} /> : <TeamOverview {...props} />;
 }
 
 // Zichtbaar voor élke rol, ongewijzigd t.o.v. het oude single-page dashboard --
@@ -244,6 +239,8 @@ function MatthiasOverview(props: {
         </TiltCard>
       </motion.div>
 
+      <WorkflowCard />
+
       <div className="section-head"><span className="section-title">Omzet in detail</span></div>
       <p className="section-sub">MRR per venture over tijd — hover voor exacte cijfers per dag, klik een naam om 'm tijdelijk te verbergen</p>
       <RevenueChart snapshots={mrrSnapshots} ventures={ventures} />
@@ -376,6 +373,8 @@ function TeamOverview(props: { me: string; initialTasks: Task[]; initialCrew: Cr
 
   return (
     <>
+      <WorkflowCard />
+
       <div className="section-head"><span className="section-title">Voor jou</span></div>
       <ForYouList tasks={tasks} me={me} ventureName={ventureName} />
 
