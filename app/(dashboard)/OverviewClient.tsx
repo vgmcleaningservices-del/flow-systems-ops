@@ -5,11 +5,12 @@ import { AnimatePresence } from "motion/react";
 import * as motion from "motion/react-client";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { post } from "@/lib/api-client";
-import type { Crew, Payout, Task, Tool, Venture, WikiPage } from "@/lib/dashboard-types";
+import type { Crew, MrrSnapshot, Payout, Task, Tool, Venture, WikiPage } from "@/lib/dashboard-types";
 import { fmtEUR, pad, relTime } from "@/lib/dashboard-format";
 import { STAGE_LABEL } from "@/lib/dashboard-constants";
 import { ForYouList } from "./_components/ForYouList";
 import { staggerContainerVariants, staggerItemVariants, TiltCard } from "./_components/motion";
+import { RevenueChart } from "./_components/RevenueChart";
 import { MrrForm } from "./MrrForm";
 
 // Telt op vanaf 0 alleen bij de allereerste mount -- de KPI-waarden komen uit
@@ -44,6 +45,7 @@ type OverviewProps =
   | {
       variant: "matthias";
       initialVentures: Venture[]; initialCrew: Crew[]; initialTasks: Task[]; initialTools: Tool[]; initialPayouts: Payout[];
+      initialMrrSnapshots: MrrSnapshot[];
       lastActivityIso: string | null;
     }
   | {
@@ -98,13 +100,15 @@ function WorkflowCard() {
 }
 
 function MatthiasOverview(props: {
-  initialVentures: Venture[]; initialCrew: Crew[]; initialTasks: Task[]; initialTools: Tool[]; initialPayouts: Payout[]; lastActivityIso: string | null;
+  initialVentures: Venture[]; initialCrew: Crew[]; initialTasks: Task[]; initialTools: Tool[]; initialPayouts: Payout[];
+  initialMrrSnapshots: MrrSnapshot[]; lastActivityIso: string | null;
 }) {
   const [ventures, setVentures] = useState(props.initialVentures);
   const [crew, setCrew] = useState(props.initialCrew);
   const [tasks, setTasks] = useState(props.initialTasks);
   const [tools, setTools] = useState(props.initialTools);
   const [payouts, setPayouts] = useState(props.initialPayouts);
+  const [mrrSnapshots, setMrrSnapshots] = useState(props.initialMrrSnapshots);
   const [now, setNow] = useState(Date.now());
   const [selectedVentureId, setSelectedVentureId] = useState<string | null>(null);
   const [editMrrVentureId, setEditMrrVentureId] = useState<string | null>(null);
@@ -123,6 +127,7 @@ function MatthiasOverview(props: {
     const refetchTasks = () => supabaseBrowser.from("tasks").select("*").order("created_at", { ascending: false }).limit(200).then(({ data }) => data && setTasks(data as Task[]));
     const refetchTools = () => supabaseBrowser.from("tools").select("*").order("name").then(({ data }) => data && setTools(data as Tool[]));
     const refetchPayouts = () => supabaseBrowser.from("payouts").select("*").order("paid_at", { ascending: false }).then(({ data }) => data && setPayouts(data as Payout[]));
+    const refetchMrrSnapshots = () => supabaseBrowser.from("mrr_snapshots").select("*").order("captured_at", { ascending: true }).limit(2000).then(({ data }) => data && setMrrSnapshots(data as MrrSnapshot[]));
     const channel = supabaseBrowser
       .channel("flowsys-overview")
       .on("postgres_changes", { event: "*", schema: "public", table: "ventures" }, refetchVentures)
@@ -130,6 +135,7 @@ function MatthiasOverview(props: {
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, refetchTasks)
       .on("postgres_changes", { event: "*", schema: "public", table: "tools" }, refetchTools)
       .on("postgres_changes", { event: "*", schema: "public", table: "payouts" }, refetchPayouts)
+      .on("postgres_changes", { event: "*", schema: "public", table: "mrr_snapshots" }, refetchMrrSnapshots)
       .subscribe();
     return () => { supabaseBrowser.removeChannel(channel); };
   }, []);
@@ -237,6 +243,10 @@ function MatthiasOverview(props: {
           <div className="tile-foot">{payouts.length} {payouts.length === 1 ? "uitbetaling" : "uitbetalingen"} gelogd · <Link href="/uitbetalingen" style={{ color: "var(--accent)" }}>bekijk →</Link></div>
         </TiltCard>
       </motion.div>
+
+      <div className="section-head"><span className="section-title">Omzet in detail</span></div>
+      <p className="section-sub">MRR per venture over tijd — hover voor exacte cijfers per dag, klik een naam om 'm tijdelijk te verbergen</p>
+      <RevenueChart snapshots={mrrSnapshots} ventures={ventures} />
 
       <div className="section-head"><span className="section-title">Alles-oké? — Venture Overzicht</span></div>
       <p className="section-sub">Klik een venture om de rest van deze pagina daarop te focussen{selectedVenture ? " — klik nogmaals om te wissen" : ""}</p>

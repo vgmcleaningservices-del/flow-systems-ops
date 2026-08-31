@@ -11,7 +11,7 @@ export default async function OverviewPage() {
 
   if (matthias) {
     const [
-      { data: ventures }, { data: crew }, { data: tasks }, { data: tools }, { data: payouts },
+      { data: ventures }, { data: crew }, { data: tasks }, { data: tools }, { data: payouts }, { data: mrrSnapshots },
       { data: lastCommit }, { data: lastDirective },
     ] = await Promise.all([
       db.from("ventures").select("*"),
@@ -19,6 +19,7 @@ export default async function OverviewPage() {
       db.from("tasks").select("*").order("created_at", { ascending: false }).limit(200),
       db.from("tools").select("*").order("name", { ascending: true }),
       db.from("payouts").select("*").order("paid_at", { ascending: false }),
+      db.from("mrr_snapshots").select("*").order("captured_at", { ascending: true }).limit(2000),
       db.from("commits").select("ts").order("ts", { ascending: false }).limit(1),
       db.from("directives").select("ts").order("ts", { ascending: false }).limit(1),
     ]);
@@ -27,7 +28,7 @@ export default async function OverviewPage() {
       <OverviewClient
         variant="matthias"
         initialVentures={ventures ?? []} initialCrew={crew ?? []} initialTasks={tasks ?? []} initialTools={tools ?? []}
-        initialPayouts={payouts ?? []}
+        initialPayouts={payouts ?? []} initialMrrSnapshots={mrrSnapshots ?? []}
         lastActivityIso={lastActivityIso}
       />
     );

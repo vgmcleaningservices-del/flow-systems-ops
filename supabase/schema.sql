@@ -163,6 +163,16 @@ create table if not exists commit_summaries (
   created_at timestamptz not null default now()
 );
 
+-- Historische MRR-snapshots -- ventures.mrr/mrr_prev geeft alleen nu vs. vorige
+-- waarde, dit is wat de omzetgrafiek nodig heeft. Geschreven door de dagelijkse
+-- /api/mrr-sync cron en door elke handmatige MRR-wijziging.
+create table if not exists mrr_snapshots (
+  id bigint generated always as identity primary key,
+  venture_id text not null references ventures(id),
+  mrr int not null,
+  captured_at timestamptz not null default now()
+);
+
 -- seed data — edit freely afterwards from the dashboard or the Supabase table editor.
 -- Order matters: crew and ventures reference each other (pitched_by / current_venture_id),
 -- so insert both without their cross-reference first, then backfill with UPDATEs —

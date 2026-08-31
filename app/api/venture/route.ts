@@ -34,5 +34,12 @@ export async function POST(req: NextRequest) {
 
   const { error } = await db.from("ventures").update(update).eq("id", body.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Handmatige MRR-wijziging is ook een echt datapunt voor de omzetgrafiek --
+  // niet wachten tot de volgende dagelijkse cron-snapshot.
+  if (typeof body.mrr === "number") {
+    await db.from("mrr_snapshots").insert({ venture_id: body.id, mrr: body.mrr });
+  }
+
   return NextResponse.json({ ok: true });
 }

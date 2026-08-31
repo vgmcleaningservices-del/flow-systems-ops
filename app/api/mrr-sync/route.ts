@@ -18,13 +18,13 @@ async function isAuthorized(req: NextRequest): Promise<boolean> {
 async function sync() {
   const reportSecret = process.env.MRR_REPORT_SECRET;
   const db = supabaseAdmin();
-  const { data: ventures } = await db
+  const { data: syncable } = await db
     .from("ventures")
     .select("id, mrr, mrr_source_url")
     .not("mrr_source_url", "is", null);
 
   const results: { id: string; mrr?: number; error?: string }[] = [];
-  for (const v of ventures ?? []) {
+  for (const v of syncable ?? []) {
     try {
       const res = await fetch(v.mrr_source_url as string, {
         headers: { Authorization: `Bearer ${reportSecret}` },
@@ -54,6 +54,15 @@ async function sync() {
       results.push({ id: v.id, error: err instanceof Error ? err.message : "unknown" });
     }
   }
+
+  // Dagelijks snapshot voor ÁLLE ventures (niet enkel de live-Stripe-gesyncte) --
+  // dit is de enige plek die de omzetgrafiek van dagelijkse datapunten voorziet
+  // voor ventures waar Matthias de MRR gewoon handmatig bijhoudt.
+  const { data: allVentures } = await db.from("ventures").select("id, mrr");
+  if (allVentures?.length) {
+    await db.from("mrr_snapshots").insert(allVentures.map((v) => ({ venture_id: v.id, mrr: v.mrr })));
+  }
+
   return results;
 }
 
