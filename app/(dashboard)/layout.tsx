@@ -3,6 +3,7 @@ import { PEOPLE_NAME } from "@/lib/dashboard-constants";
 import { Sidebar } from "./_components/Sidebar";
 import { MobileNav } from "./_components/MobileNav";
 import { LogoutButton } from "./_components/LogoutButton";
+import { PageTransition } from "./_components/PageTransition";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <LogoutButton />
           </div>
         </div>
-        {children}
+        <PageTransition>{children}</PageTransition>
         <footer>FLOW SYSTEMS B.V. — INTERN GEBRUIK — NIET DELEN BUITEN KERNTEAM</footer>
       </div>
       <MobileNav isMatthias={matthias} />
