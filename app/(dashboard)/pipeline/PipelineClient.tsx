@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
+import * as motion from "motion/react-client";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { post } from "@/lib/api-client";
 import type { Crew, Venture } from "@/lib/dashboard-types";
 import { STAGE_LABEL } from "@/lib/dashboard-constants";
 import { pad } from "@/lib/dashboard-format";
+import { AnimatedDisclosure, staggerContainerVariants, staggerItemVariants } from "../_components/motion";
 import { VentureForm } from "./VentureForm";
 
 export function PipelineClient(props: { initialVentures: Venture[]; initialCrew: Crew[] }) {
@@ -37,15 +39,15 @@ export function PipelineClient(props: { initialVentures: Venture[]; initialCrew:
         {(["scouting", "sprint", "exit-ready"] as const).map((stage, idx) => (
           <div key={stage}>
             <div className="col-head"><b>{pad(idx + 1)}</b> {STAGE_LABEL[stage]}</div>
-            <div className="col-body">
+            <motion.div className="col-body" variants={staggerContainerVariants} initial="hidden" animate="show">
               {ventures.filter((v) => v.stage === stage).map((v) => (
-                <div className="app-card" key={v.id}>
+                <motion.div className="app-card" key={v.id} variants={staggerItemVariants}>
                   <div className="app-head" onClick={() => setOpenVentureId(openVentureId === v.id ? null : v.id)}>
                     <span className="app-name-row"><span className="app-name">{v.name}</span>{v.stage === "sprint" && <span className="app-badge">In Productie</span>}</span>
                     <span className={"chev" + (openVentureId === v.id ? " open" : "")}>⌄</span>
                   </div>
-                  {openVentureId === v.id && (
-                    editVentureId === v.id ? (
+                  <AnimatedDisclosure open={openVentureId === v.id}>
+                    {editVentureId === v.id ? (
                       <VentureForm venture={v} crew={crew} onCancel={() => setEditVentureId(null)} onSave={(patch) => saveVenture(v, patch)} />
                     ) : (
                       <div className="detail-inner">
@@ -60,11 +62,11 @@ export function PipelineClient(props: { initialVentures: Venture[]; initialCrew:
                         </div>
                         <div className="edit-actions" style={{ marginTop: 10 }}><button className="btn" onClick={() => setEditVentureId(v.id)}>Bewerken</button></div>
                       </div>
-                    )
-                  )}
-                </div>
+                    )}
+                  </AnimatedDisclosure>
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
           </div>
         ))}
       </div>
