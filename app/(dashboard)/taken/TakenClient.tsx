@@ -118,6 +118,7 @@ export function TakenClient(props: { initialMe: string; initialTasks: Task[]; in
                     <span className="app-name-row">
                       <span className="app-name">{t.title}</span>
                       {subtasks.length > 0 && <span className="subtask-count">{subtasksDone}/{subtasks.length}</span>}
+                      <span className="task-assignee-badge">{crew.find((c) => c.id === t.assigned_to)?.name ?? t.assigned_to}</span>
                       {(t.priority === "high" || t.priority === "urgent") && <span className={"tag " + TASK_PRIORITY_TAG[t.priority]}>{TASK_PRIORITY_LABEL[t.priority]}</span>}
                       {t.due_date && <span className={"due-chip" + (isOverdue ? " due-over" : isDueSoon ? " due-soon" : "")}>{new Date(t.due_date).toLocaleDateString("nl-BE", { day: "2-digit", month: "2-digit" })}</span>}
                       {!taskFilterVenture && <span className="task-venture-badge">{ventureName(t.venture_id)}</span>}
