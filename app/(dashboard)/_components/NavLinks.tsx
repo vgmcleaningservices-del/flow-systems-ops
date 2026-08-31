@@ -20,10 +20,12 @@ const ADMIN_NAV_ITEMS = [
 
 // `scope` namespacet de layoutId van de actieve-pil binnen Motion's
 // LayoutGroup -- nodig omdat Sidebar's NavLinks altijd gemount blijft
-// (alleen CSS-verborgen onder 880px) terwijl MobileNav's instantie apart
-// mount zodra de drawer opent; op mobiel-met-open-drawer staan dus beide
-// tegelijk in de DOM en zouden zonder namespacing dezelfde layoutId delen.
-export function NavLinks({ isMatthias, onNavigate, scope }: { isMatthias: boolean; onNavigate?: () => void; scope: string }) {
+// (alleen CSS-verborgen onder 880px) terwijl TopNav's instantie daaronder
+// juist wél zichtbaar is; zonder namespacing zouden beide dezelfde
+// layoutId delen zodra ze tegelijk in de DOM staan.
+export function NavLinks({ isMatthias, onNavigate, scope, variant = "vertical" }: {
+  isMatthias: boolean; onNavigate?: () => void; scope: string; variant?: "vertical" | "horizontal";
+}) {
   const pathname = usePathname();
   const link = (href: string, label: string) => {
     const active = pathname === href;
@@ -42,13 +44,20 @@ export function NavLinks({ isMatthias, onNavigate, scope }: { isMatthias: boolea
   };
   return (
     <LayoutGroup id={scope}>
-      <nav className="sidebar-nav">
+      <nav className={variant === "horizontal" ? "topbar-nav" : "sidebar-nav"}>
         {NAV_ITEMS.map((i) => link(i.href, i.label))}
         {isMatthias && (
-          <>
-            <div className="sidebar-section-label">Beheer</div>
-            {ADMIN_NAV_ITEMS.map((i) => link(i.href, i.label))}
-          </>
+          variant === "horizontal" ? (
+            <>
+              <span className="topbar-divider" />
+              {ADMIN_NAV_ITEMS.map((i) => link(i.href, i.label))}
+            </>
+          ) : (
+            <>
+              <div className="sidebar-section-label">Beheer</div>
+              {ADMIN_NAV_ITEMS.map((i) => link(i.href, i.label))}
+            </>
+          )
         )}
         {link("/instellingen", "Instellingen")}
       </nav>

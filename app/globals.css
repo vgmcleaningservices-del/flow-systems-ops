@@ -134,7 +134,7 @@ a { color: inherit; }
 
 /* ---------- topbar ---------- */
 .topbar {
-  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  display: flex; flex-direction: column; gap: 10px;
   position: sticky; top: 14px; z-index: 30;
   background: var(--nav-bg);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
@@ -144,6 +144,27 @@ a { color: inherit; }
   padding: 14px 22px;
   box-shadow: var(--shadow);
   margin-bottom: 30px;
+}
+.topbar-main { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+/* Op desktop doet de sidebar al dienst als paginanavigatie -- deze rij komt
+   er alleen bij zodra die verdwijnt (zelfde 880px-grens), zodat pagina's
+   altijd met één klik bereikbaar zijn i.p.v. eerst het ☰-menu te openen. */
+.topbar-nav { display: none; }
+@media (max-width: 880px) {
+  .topbar-nav {
+    display: flex; align-items: center; gap: 4px;
+    overflow-x: auto; margin: 0 -6px; padding: 2px 6px 4px; -ms-overflow-style: none; scrollbar-width: none;
+    border-top: 1px solid var(--border); padding-top: 10px;
+  }
+  .topbar-nav::-webkit-scrollbar { display: none; }
+  .topbar-nav a {
+    position: relative; white-space: nowrap; text-decoration: none; flex-shrink: 0;
+    color: var(--text-dim); font-size: var(--text-sm); font-weight: 590;
+    padding: 7px 13px; border-radius: var(--radius-pill);
+  }
+  .topbar-nav a:hover { background: var(--surface-3); color: var(--text); }
+  .topbar-nav a.active { color: var(--accent); font-weight: 650; }
+  .topbar-nav .topbar-divider { width: 1px; height: 16px; margin: 0 2px; }
 }
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand-badge {
@@ -199,31 +220,12 @@ a { color: inherit; }
 }
 .app-main { flex: 1; min-width: 0; }
 /* Topbar brand is only needed once the sidebar (which already shows it) hides. */
-.app-shell .topbar > .brand { display: none; }
+.app-shell .topbar-main > .brand { display: none; }
 @media (max-width: 880px) {
   .sidebar { display: none; }
   .app-shell { display: block; }
-  .app-shell .topbar > .brand { display: flex; }
+  .app-shell .topbar-main > .brand { display: flex; }
 }
-
-/* ---------- mobile section nav ---------- */
-/* No in-page navigation existed at all -- 9 sections were one long scroll
-   with no way to jump. Desktop has the sidebar; below its breakpoint (880px)
-   this floating jump-menu takes over so there's never a gap with zero nav. */
-.mobile-nav-btn {
-  display: none; position: fixed; bottom: 20px; right: 20px; z-index: 40;
-  width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--border);
-  background: var(--accent); color: var(--accent-text); font-size: 19px;
-  align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--shadow-hover);
-}
-.mobile-nav-popover {
-  position: fixed; bottom: 76px; right: 20px; z-index: 40;
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  box-shadow: var(--shadow-hover); padding: 8px; display: flex; flex-direction: column; gap: 2px;
-  max-height: 60vh; overflow-y: auto; min-width: 200px;
-}
-.mobile-nav-popover .sidebar-nav { margin-top: 0; }
-@media (max-width: 880px) { .mobile-nav-btn { display: flex; } }
 select, input.field, textarea.field {
   background: var(--surface-3); border: 1px solid var(--border); color: var(--text);
   font-family: var(--font-sans); font-size: var(--text-base); border-radius: var(--radius-sm); padding: 8px 11px;
