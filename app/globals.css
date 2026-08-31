@@ -130,6 +130,13 @@ body {
 }
 a { color: inherit; }
 * { transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease, transform 0.15s ease; }
+/* TiltCard (motion.tsx) drives transform on these directly, every mousemove
+   frame -- a CSS transition on transform would ease-lag behind the cursor
+   instead of tracking it 1:1. The hover-lift these classes used to get from
+   plain CSS now comes from TiltCard's own whileHover instead. */
+.venture-chip, .crew-card, .app-card, .tile {
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+}
 .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 22px 90px; }
 
 /* ---------- topbar ---------- */
@@ -264,7 +271,7 @@ button.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   padding: 20px 22px; position: relative; overflow: hidden; box-shadow: var(--shadow-sm);
 }
-.tile:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+.tile:hover { box-shadow: var(--shadow); }
 .tile.tile-urgent { border-color: rgba(224, 52, 42, 0.35); animation: urgent-glow 2s ease-in-out infinite; }
 @keyframes urgent-glow { 0%, 100% { box-shadow: var(--shadow-sm); } 50% { box-shadow: 0 0 0 5px var(--critical-dim); } }
 .tile-label { font-size: 12.5px; font-weight: 590; color: var(--text-faint); display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 12px; }
@@ -300,7 +307,7 @@ svg.icon { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-w
 /* ---------- crew cards ---------- */
 .crew-list { display: flex; flex-direction: column; gap: 11px; }
 .crew-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); }
-.crew-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+.crew-card:hover { box-shadow: var(--shadow); }
 .crew-card.bottleneck { border-color: rgba(224, 52, 42, 0.35); box-shadow: 0 0 0 4px var(--critical-dim); animation: urgent-glow 2s ease-in-out infinite; }
 .crew-card.vacant { border-style: dashed; border-color: var(--border-strong); background: transparent; box-shadow: none; }
 .crew-top { display: grid; grid-template-columns: auto 1fr auto; gap: 13px; align-items: start; }
@@ -348,7 +355,7 @@ svg.icon { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-w
 .col-head b { color: var(--accent); }
 .col-body { display: flex; flex-direction: column; gap: 10px; }
 .app-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 15px 16px; box-shadow: var(--shadow-sm); }
-.app-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+.app-card:hover { box-shadow: var(--shadow); }
 .app-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; }
 .app-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .app-name { font-weight: 650; font-size: 14.5px; letter-spacing: -0.01em; }
@@ -456,8 +463,8 @@ footer { margin-top: 50px; font-size: 11.5px; color: var(--text-faint); text-ali
   scroll-snap-align: start;
 }
 @media (max-width: 480px) { .venture-chip { min-width: 82vw; } }
-.venture-chip:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
-.venture-chip.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.venture-chip:hover { box-shadow: var(--shadow); }
+.venture-chip.selected { border-color: var(--accent); border-left: 3px solid var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
 .venture-chip .vc-name { font-weight: 650; font-size: 14.5px; color: var(--text); letter-spacing: -0.01em; }
 .venture-chip .vc-stage { font-size: 11px; font-weight: 590; color: var(--text-faint); margin-top: 3px; }
 .venture-chip .vc-mrr { font-family: var(--font-mono); font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); margin-top: 10px; }

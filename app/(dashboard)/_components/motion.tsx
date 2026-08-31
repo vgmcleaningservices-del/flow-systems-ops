@@ -1,7 +1,7 @@
 "use client";
-import { AnimatePresence } from "motion/react";
+import { AnimatePresence, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import * as motion from "motion/react-client";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ComponentProps, type MouseEvent, type ReactNode } from "react";
 import type { Variants } from "motion/react";
 
 // Toegepast op bestaande containers/elementen zelf (tag omgezet naar
@@ -39,5 +39,55 @@ export function AnimatedDisclosure({ open, children }: { open: boolean; children
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+// Alleen actief op precisie-hover-apparaten (muis) én als de gebruiker geen
+// "verminderde beweging" heeft ingesteld -- useReducedMotion() dekt hier iets
+// dat MotionConfig(reducedMotion="user") juist NIET dekt: rauwe
+// useMotionValue/useTransform-waarden lopen niet via Motion's animate-pad,
+// dus zonder deze check zou kantelen gewoon doorgaan voor wie dat uitzette.
+function useTiltEnabled() {
+  const reducedMotion = useReducedMotion();
+  const [fineHover, setFineHover] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const update = () => setFineHover(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return fineHover && !reducedMotion;
+}
+
+type TiltProps = ComponentProps<typeof motion.div> & { as?: "div" | "button" };
+
+// Drop-in vervanging van de bestaande motion.div/motion.button op kaarten
+// (.venture-chip, .crew-card, .app-card, .tile) -- geen extra wrapper, dus
+// bestaande props zoals `variants`/`key` blijven gewoon werken. Bewust niet
+// gebruikt op tabelrijen (reflowt de hele tabel per frame) of knoppen/nav-
+// links (kantelen leest daar als bug, niet als feature).
+export function TiltCard({ as = "div", style, ...rest }: TiltProps) {
+  const enabled = useTiltEnabled();
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const rotateX = useTransform(y, [-0.5, 0.5], [8, -8]);
+  const rotateY = useTransform(x, [-0.5, 0.5], [-8, 8]);
+  const Comp = as === "button" ? motion.button : motion.div;
+
+  if (!enabled) return <Comp style={style} {...rest} />;
+
+  return (
+    <Comp
+      style={{ ...style, rotateX, rotateY, transformPerspective: 800 }}
+      whileHover={{ y: -1 }}
+      onMouseMove={(e: MouseEvent<HTMLElement>) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        x.set((e.clientX - r.left) / r.width - 0.5);
+        y.set((e.clientY - r.top) / r.height - 0.5);
+      }}
+      onMouseLeave={() => { x.set(0); y.set(0); }}
+      {...rest}
+    />
   );
 }
