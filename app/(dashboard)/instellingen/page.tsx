@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { getMe, isMatthias } from "@/lib/auth";
 import { ThemeToggle } from "./ThemeToggle";
+import { BeheerShortcuts } from "./BeheerShortcuts";
 
 export const dynamic = "force-dynamic";
 
@@ -25,14 +25,7 @@ export default async function InstellingenPage() {
         <>
           <div className="section-head"><span className="section-title">Beheer</span></div>
           <p className="section-sub">Kortpaden naar de onderdelen die je het vaakst beheert</p>
-          <div className="telemetry cols-2">
-            <Link href="/squad" className="app-card" style={{ display: "block", textDecoration: "none" }}>
-              <span className="app-name">Squad Status →</span>
-            </Link>
-            <Link href="/tools" className="app-card" style={{ display: "block", textDecoration: "none" }}>
-              <span className="app-name">Tools &amp; Abonnementen →</span>
-            </Link>
-          </div>
+          <BeheerShortcuts />
         </>
       )}
     </>

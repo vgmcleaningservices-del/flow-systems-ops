@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
+import * as motion from "motion/react-client";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { post } from "@/lib/api-client";
 import type { Crew, CrewEvent, CommitRow, Metric, Venture } from "@/lib/dashboard-types";
 import { METRIC_LABELS } from "@/lib/dashboard-constants";
 import { isoWeek } from "@/lib/dashboard-format";
+import { staggerContainerVariants, staggerItemVariants, TiltCard } from "../../_components/motion";
 import { MetricForm } from "./MetricForm";
 
 export function PrestatiesClient(props: {
@@ -37,13 +39,13 @@ export function PrestatiesClient(props: {
     <>
       <div className="section-head"><span className="section-title">Prestaties</span></div>
       <p className="section-sub">Commits uit Git zijn automatisch; outreach/scouting log je handmatig hieronder</p>
-      <div className="perf-grid">
+      <motion.div className="perf-grid" variants={staggerContainerVariants} initial="hidden" animate="show">
         {crew.map((c) => {
           const commitCount = commits.filter((cm) => cm.crew_id === c.id && new Date(cm.ts).getTime() > sevenDaysAgo).length;
           const handoffCount = crewEvents.filter((e) => e.crew_id === c.id && e.to_status === "bottleneck" && e.source === "webhook" && new Date(e.ts).getTime() > sevenDaysAgo).length;
           const recentMetrics = metrics.filter((m) => m.crew_id === c.id).slice(0, 3);
           return (
-            <div className="perf-card" key={c.id}>
+            <TiltCard className="perf-card" key={c.id} variants={staggerItemVariants}>
               <div className="perf-name">{c.name}</div>
               <div className="perf-stats">
                 <div><div className="perf-stat-num">{commitCount}</div><div className="perf-stat-label">Commits (7d)</div></div>
@@ -55,10 +57,10 @@ export function PrestatiesClient(props: {
                   <div className="perf-metric-line" key={m.id}><span>{METRIC_LABELS[m.label] ?? m.label} ({m.period})</span><span>{m.value}</span></div>
                 ))}
               </div>
-            </div>
+            </TiltCard>
           );
         })}
-      </div>
+      </motion.div>
       <MetricForm crew={crew} ventures={ventures} defaultPeriod={isoWeek(new Date())} onSubmit={(body) => post("/api/metrics", body)} />
     </>
   );

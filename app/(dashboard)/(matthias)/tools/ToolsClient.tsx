@@ -7,7 +7,7 @@ import { post } from "@/lib/api-client";
 import type { Tool } from "@/lib/dashboard-types";
 import { PEOPLE_NAME, TOOL_CATEGORY_LABEL, BILLING_LABEL } from "@/lib/dashboard-constants";
 import { fmtEUR } from "@/lib/dashboard-format";
-import { staggerContainerVariants, staggerItemVariants } from "../../_components/motion";
+import { staggerContainerVariants, staggerItemVariants, TiltCard } from "../../_components/motion";
 import { ToolForm } from "./ToolForm";
 import { ToolCreateForm } from "./ToolCreateForm";
 
@@ -41,16 +41,16 @@ export function ToolsClient(props: { initialTools: Tool[] }) {
       <div className="section-head"><span className="section-title">Tools &amp; Abonnementen</span></div>
       <p className="section-sub">Alle programma&apos;s en diensten die Flow Systems gebruikt, op één plek</p>
       <motion.div className="telemetry cols-2" style={{ marginBottom: 16 }} variants={staggerContainerVariants} initial="hidden" animate="show">
-        <motion.div className="tile" variants={staggerItemVariants}>
+        <TiltCard className="tile" variants={staggerItemVariants}>
           <div className="tile-label"><span>Totaal / maand</span></div>
           <div className="tile-value">{fmtEUR(monthlyToolsCost)}</div>
           <div className="tile-foot">{activeTools.length} actieve {activeTools.length === 1 ? "tool" : "tools"}</div>
-        </motion.div>
-        <motion.div className="tile" variants={staggerItemVariants}>
+        </TiltCard>
+        <TiltCard className="tile" variants={staggerItemVariants}>
           <div className="tile-label"><span>Eerstvolgende vervaldatum</span></div>
           <div className="tile-value" style={{ fontSize: 22 }}>{nextRenewal ? new Date(nextRenewal.renews_on!).toLocaleDateString("nl-BE") : "—"}</div>
           <div className="tile-foot">{nextRenewal ? nextRenewal.name : "niks gepland"}</div>
-        </motion.div>
+        </TiltCard>
       </motion.div>
       <div className="ledger-wrap">
         <table className="ledger-table">
