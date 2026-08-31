@@ -204,14 +204,6 @@ a { color: inherit; }
   max-height: 60vh; overflow-y: auto; min-width: 200px;
 }
 .mobile-nav-popover .sidebar-nav { margin-top: 0; }
-/* Still used directly by the not-yet-migrated single-page Dashboard's own
-   anchor-jump popover (raw <a> tags, no .sidebar-nav wrapper) until its
-   cutover step removes that component. */
-.mobile-nav-popover > a {
-  text-decoration: none; color: var(--text-dim); font-size: var(--text-base); font-weight: 590;
-  padding: 9px 12px; border-radius: var(--radius-sm); display: block;
-}
-.mobile-nav-popover > a:hover { background: var(--surface-3); color: var(--text); }
 @media (max-width: 880px) { .mobile-nav-btn { display: flex; } }
 select, input.field, textarea.field {
   background: var(--surface-3); border: 1px solid var(--border); color: var(--text);
