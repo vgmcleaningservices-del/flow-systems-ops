@@ -1,4 +1,5 @@
 {
+  "installCommand": "npm install",
   "crons": [
     { "path": "/api/mrr-sync", "schedule": "0 6 * * *" }
   ]
