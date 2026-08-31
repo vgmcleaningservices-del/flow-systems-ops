@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { post } from "@/lib/api-client";
@@ -8,6 +8,34 @@ import { fmtEUR, pad, relTime } from "@/lib/dashboard-format";
 import { STAGE_LABEL } from "@/lib/dashboard-constants";
 import { ForYouList } from "./_components/ForYouList";
 import { MrrForm } from "./MrrForm";
+
+// Telt op vanaf 0 alleen bij de allereerste mount -- de KPI-waarden komen uit
+// live realtime state, dus zonder deze mount-gate zou elke realtime-update
+// (iemand anders vinkt een taak af, een MRR-sync) de telling laten herstarten,
+// wat afleidt in plaats van polijst.
+function useCountUp(target: number, durationMs = 600) {
+  const [value, setValue] = useState(target);
+  const hasMounted = useRef(false);
+
+  useEffect(() => {
+    if (!hasMounted.current) {
+      hasMounted.current = true;
+      const start = performance.now();
+      let raf: number;
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - start) / durationMs);
+        const eased = 1 - Math.pow(1 - t, 3);
+        setValue(Math.round(target * eased));
+        if (t < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+      return () => cancelAnimationFrame(raf);
+    }
+    setValue(target);
+  }, [target, durationMs]);
+
+  return value;
+}
 
 type OverviewProps =
   | {
@@ -123,6 +151,9 @@ function MatthiasOverview(props: {
 
   const bottleneckCount = crew.filter((c) => c.status === "bottleneck").length;
   const openTaskCount = tasks.filter((t) => t.status !== "done").length;
+  const animatedMrr = useCountUp(totalMrr);
+  const animatedOpenTasks = useCountUp(openTaskCount);
+  const animatedBottlenecks = useCountUp(bottleneckCount);
   const activeTools = tools.filter((t) => t.status === "active");
   const nextRenewal = [...activeTools].filter((t) => t.renews_on).sort((a, b) => (a.renews_on! < b.renews_on! ? -1 : 1))[0] ?? null;
 
@@ -148,19 +179,19 @@ function MatthiasOverview(props: {
       <div className="telemetry cols-2">
         <div className="tile">
           <div className="tile-label"><span>Holding MRR</span></div>
-          <div className="tile-value">{fmtEUR(totalMrr)}
+          <div className="tile-value">{fmtEUR(animatedMrr)}
             {totalMrrPrev > 0 && <span className={"tile-delta " + (totalMrrPrev <= totalMrr ? "up" : "down")}>{totalMrrPrev <= totalMrr ? "▲" : "▼"} {Math.abs(((totalMrr - totalMrrPrev) / totalMrrPrev) * 100).toFixed(1)}%</span>}
           </div>
           <div className="tile-foot">Som van {ventures.length} ventures</div>
         </div>
         <div className="tile">
           <div className="tile-label"><span>Open taken</span></div>
-          <div className="tile-value">{openTaskCount}</div>
+          <div className="tile-value">{animatedOpenTasks}</div>
           <div className="tile-foot">bedrijfsbreed, alle ventures</div>
         </div>
         <div className={"tile" + (bottleneckCount > 0 ? " tile-urgent" : "")}>
           <div className="tile-label"><span>Bottlenecks</span></div>
-          <div className={"tile-value" + (bottleneckCount > 0 ? " critical-color" : "")}>{bottleneckCount}</div>
+          <div className={"tile-value" + (bottleneckCount > 0 ? " critical-color" : "")}>{animatedBottlenecks}</div>
           <div className="tile-foot">{bottleneckCount > 0 ? "wacht op oppak-actie" : "pipeline vrij"}</div>
         </div>
         <div className="tile">
