@@ -139,6 +139,11 @@ export default function Dashboard(props: {
   // meer. Kan alleen veranderen via een echte login, dus geen state nodig.
   const me = props.initialMe ?? "";
   const meName = PEOPLE_NAME[me] ?? me;
+  // Matthias ziet het volledige dashboard (overzicht, cijfers, geld, veto).
+  // Teamleden zien alleen wat hun werk aangaat: Squad Status, App Pipeline,
+  // Taken en Wiki -- geen MRR/Telemetrie, Prestaties, Uitbetalingen, Tools &
+  // Abonnementen of VETO Console.
+  const isMatthias = me === "matthias";
   const [now, setNow] = useState(Date.now());
   const [selectedVentureId, setSelectedVentureId] = useState<string | null>(null);
 
@@ -246,12 +251,14 @@ export default function Dashboard(props: {
     .filter((t) => !taskFilterPriority || t.priority === taskFilterPriority)
     .filter((t) => !taskFilterOverdue || (!!t.due_date && t.due_date < todayStr && t.status !== "done"));
 
-  const SECTIONS = [
-    { id: "00", title: "Alles-oké?" }, { id: "01", title: "Telemetrie" }, { id: "02", title: "Squad Status" },
-    { id: "03", title: "App Pipeline" }, { id: "04", title: "Taken" }, { id: "05", title: "Prestaties" },
-    { id: "06", title: "Uitbetalingen" }, { id: "07", title: "VETO Console" }, { id: "08", title: "Tools & Abonnementen" },
-    { id: "09", title: "Wiki" },
+  const ALL_SECTIONS = [
+    { id: "00", title: "Alles-oké?", matthiasOnly: true }, { id: "01", title: "Telemetrie", matthiasOnly: true },
+    { id: "02", title: "Squad Status", matthiasOnly: false }, { id: "03", title: "App Pipeline", matthiasOnly: false },
+    { id: "04", title: "Taken", matthiasOnly: false }, { id: "05", title: "Prestaties", matthiasOnly: true },
+    { id: "06", title: "Uitbetalingen", matthiasOnly: true }, { id: "07", title: "VETO Console", matthiasOnly: true },
+    { id: "08", title: "Tools & Abonnementen", matthiasOnly: true }, { id: "09", title: "Wiki", matthiasOnly: false },
   ];
+  const SECTIONS = ALL_SECTIONS.filter((s) => isMatthias || !s.matthiasOnly);
   // Algemene pagina's (venture_id null) blijven altijd zichtbaar, ook met een
   // venture geselecteerd -- een kennisbank moet bedrijfsbrede naslag niet verbergen.
   const visibleWikiPages = wikiPages.filter((w) => !selectedVentureId || w.venture_id === selectedVentureId || w.venture_id === null);
@@ -363,6 +370,8 @@ export default function Dashboard(props: {
         </div>
       </div>
 
+      {isMatthias && (
+      <>
       {/* 00 OVERVIEW */}
       <div className="section-head" id="section-00"><span className="section-num">00</span><span className="section-title">Alles-oké? — Venture Overzicht</span></div>
       <p className="section-sub">Klik een venture om de rest van de pagina daarop te focussen{selectedVenture ? " — klik nogmaals om te wissen" : ""}</p>
@@ -426,6 +435,8 @@ export default function Dashboard(props: {
           <div className="tile-foot">{clockFoot}<button className="btn ghost" style={{ marginLeft: "auto" }} onClick={resetSprint}>Start nieuwe 72u sprint</button></div>
         </div>
       </div>
+      </>
+      )}
 
       <div className="main-grid">
         <div>
@@ -616,6 +627,8 @@ export default function Dashboard(props: {
       </div>
       <TaskCreateForm crew={crew} ventures={ventures} defaultVentureId={selectedVentureId} onSubmit={createTask} />
 
+      {isMatthias && (
+      <>
       {/* PRESTATIES */}
       <div className="section-head" id="section-05"><span className="section-num">05</span><span className="section-title">Prestaties</span></div>
       <p className="section-sub">Commits uit Git zijn automatisch; outreach/scouting log je handmatig hieronder</p>
@@ -751,6 +764,8 @@ export default function Dashboard(props: {
         </table>
       </div>
       <ToolCreateForm onSubmit={createTool} />
+      </>
+      )}
 
       {/* WIKI */}
       <div className="section-head" id="section-09"><span className="section-num">09</span><span className="section-title">Wiki</span></div>
