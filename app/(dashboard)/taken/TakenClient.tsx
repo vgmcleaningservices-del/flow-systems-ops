@@ -60,6 +60,18 @@ export function TakenClient(props: { initialMe: string; initialTasks: Task[]; in
   async function toggleSubtask(sub: Task) {
     await post(`/api/tasks/${sub.id}`, { status: sub.status === "done" ? "todo" : "done" });
   }
+  async function quickAdvance(t: Task, status: TaskStatus) {
+    await post(`/api/tasks/${t.id}`, { status });
+  }
+  // Eén ondubbelzinnige vervolgstap per status i.p.v. de volle statuslijst --
+  // "handed_off" hoort hier bewust niet bij: dat is altijd het gevolg van een
+  // nieuwe toewijzing (zie app/api/tasks/[id]/route.ts), nooit een losse
+  // statusknop, dus dat blijft via "Bewerken" lopen.
+  const NEXT_STEP: Partial<Record<TaskStatus, { status: TaskStatus; label: string }>> = {
+    todo: { status: "in_progress", label: "▶ Start" },
+    in_progress: { status: "done", label: "✓ Klaar" },
+    handed_off: { status: "in_progress", label: "▶ Oppakken" },
+  };
   async function addSubtask(parent: Task) {
     const title = (subtaskDrafts[parent.id] || "").trim();
     if (!title) return;
@@ -138,7 +150,10 @@ export function TakenClient(props: { initialMe: string; initialTasks: Task[]; in
                             <button className="btn" onClick={() => addSubtask(t)}>+</button>
                           </div>
                         </div>
-                        <div className="edit-actions" style={{ marginTop: 10 }}><button className="btn" onClick={() => setEditTaskId(t.id)}>Bewerken / doorsturen</button></div>
+                        <div className="edit-actions" style={{ marginTop: 10 }}>
+                          {NEXT_STEP[t.status] && <button className="btn primary" onClick={() => quickAdvance(t, NEXT_STEP[t.status]!.status)}>{NEXT_STEP[t.status]!.label}</button>}
+                          <button className="btn ghost" onClick={() => setEditTaskId(t.id)}>Bewerken / doorsturen</button>
+                        </div>
                       </div>
                     )}
                   </AnimatedDisclosure>
