@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
+import * as motion from "motion/react-client";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { post } from "@/lib/api-client";
 import type { Crew, Task, TaskPriority, TaskStatus, Venture } from "@/lib/dashboard-types";
 import { TASK_STATUSES, TASK_STATUS_LABEL, TASK_COLOR, TASK_PRIORITIES, TASK_PRIORITY_LABEL, TASK_PRIORITY_TAG, PEOPLE_NAME } from "@/lib/dashboard-constants";
 import { pad, relTime } from "@/lib/dashboard-format";
 import { ForYouList } from "../_components/ForYouList";
+import { AnimatedDisclosure, staggerContainerVariants, staggerItemVariants } from "../_components/motion";
 import { TaskForm } from "./TaskForm";
 import { TaskCreateForm } from "./TaskCreateForm";
 
@@ -92,14 +94,14 @@ export function TakenClient(props: { initialMe: string; initialTasks: Task[]; in
         {TASK_STATUSES.map((stage, idx) => (
           <div key={stage}>
             <div className="col-head"><b style={{ color: TASK_COLOR[stage] }}>{pad(idx + 1)}</b> {TASK_STATUS_LABEL[stage]}</div>
-            <div className="col-body">
+            <motion.div className="col-body" variants={staggerContainerVariants} initial="hidden" animate="show">
               {boardTasks.filter((t) => t.status === stage).map((t) => {
                 const subtasks = tasks.filter((s) => s.parent_task_id === t.id);
                 const subtasksDone = subtasks.filter((s) => s.status === "done").length;
                 const isOverdue = !!t.due_date && t.due_date < todayStr && t.status !== "done";
                 const isDueSoon = !!t.due_date && !isOverdue && t.due_date <= dueSoonCutoff;
                 return (
-                <div className="app-card" style={{ borderLeft: `3px solid ${TASK_COLOR[t.status]}` }} key={t.id}>
+                <motion.div className="app-card" style={{ borderLeft: `3px solid ${TASK_COLOR[t.status]}` }} key={t.id} variants={staggerItemVariants}>
                   <div className="app-head" onClick={() => setOpenTaskId(openTaskId === t.id ? null : t.id)}>
                     <span className="app-name-row">
                       <span className="app-name">{t.title}</span>
@@ -110,8 +112,8 @@ export function TakenClient(props: { initialMe: string; initialTasks: Task[]; in
                     </span>
                     <span className={"chev" + (openTaskId === t.id ? " open" : "")}>⌄</span>
                   </div>
-                  {openTaskId === t.id && (
-                    editTaskId === t.id ? (
+                  <AnimatedDisclosure open={openTaskId === t.id}>
+                    {editTaskId === t.id ? (
                       <TaskForm task={t} crew={crew} onCancel={() => setEditTaskId(null)} onSave={(patch) => saveTask(t, patch)} />
                     ) : (
                       <div className="detail-inner">
@@ -138,13 +140,13 @@ export function TakenClient(props: { initialMe: string; initialTasks: Task[]; in
                         </div>
                         <div className="edit-actions" style={{ marginTop: 10 }}><button className="btn" onClick={() => setEditTaskId(t.id)}>Bewerken / doorsturen</button></div>
                       </div>
-                    )
-                  )}
-                </div>
+                    )}
+                  </AnimatedDisclosure>
+                </motion.div>
                 );
               })}
               {boardTasks.filter((t) => t.status === stage).length === 0 && <div className="col-empty">—</div>}
-            </div>
+            </motion.div>
           </div>
         ))}
       </div>
