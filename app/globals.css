@@ -281,7 +281,7 @@ svg.icon { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-w
 /* ---------- crew cards ---------- */
 .crew-list { display: flex; flex-direction: column; gap: 11px; }
 .crew-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); }
-.crew-card:hover { box-shadow: var(--shadow); }
+.crew-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
 .crew-card.bottleneck { border-color: rgba(224, 52, 42, 0.35); box-shadow: 0 0 0 4px var(--critical-dim); animation: urgent-glow 2s ease-in-out infinite; }
 .crew-card.vacant { border-style: dashed; border-color: var(--border-strong); background: transparent; box-shadow: none; }
 .crew-top { display: grid; grid-template-columns: auto 1fr auto; gap: 13px; align-items: start; }
@@ -329,7 +329,7 @@ svg.icon { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-w
 .col-head b { color: var(--accent); }
 .col-body { display: flex; flex-direction: column; gap: 10px; }
 .app-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 15px 16px; box-shadow: var(--shadow-sm); }
-.app-card:hover { box-shadow: var(--shadow); }
+.app-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
 .app-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; }
 .app-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .app-name { font-weight: 650; font-size: 14.5px; letter-spacing: -0.01em; }
