@@ -19,6 +19,7 @@ export default async function Home() {
     { data: payouts },
     { data: tasks },
     { data: tools },
+    { data: wikiPages },
   ] = await Promise.all([
     db.from("crew").select("*").order("rank", { ascending: true }),
     db.from("ventures").select("*"),
@@ -29,6 +30,7 @@ export default async function Home() {
     db.from("payouts").select("*").order("paid_at", { ascending: false }).limit(50),
     db.from("tasks").select("*").order("created_at", { ascending: false }).limit(200),
     db.from("tools").select("*").order("name", { ascending: true }),
+    db.from("wiki_pages").select("*").order("updated_at", { ascending: false }),
   ]);
 
   return (
@@ -43,6 +45,7 @@ export default async function Home() {
       initialPayouts={payouts ?? []}
       initialTasks={tasks ?? []}
       initialTools={tools ?? []}
+      initialWikiPages={wikiPages ?? []}
     />
   );
 }

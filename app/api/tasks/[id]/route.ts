@@ -17,6 +17,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (typeof body.title === "string") update.title = body.title.trim();
   if (typeof body.description === "string") update.description = body.description;
   if (typeof body.status === "string") update.status = body.status;
+  if (typeof body.priority === "string") update.priority = body.priority;
+  if (typeof body.due_date === "string" || body.due_date === null) update.due_date = body.due_date || null;
 
   // Een nieuwe assignee kiezen IS de doorstuur-actie -- geen aparte knop nodig.
   // handed_off_by komt uit de geverifieerde identiteit van wie op "Opslaan"

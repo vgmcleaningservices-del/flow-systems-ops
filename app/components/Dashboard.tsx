@@ -1,5 +1,5 @@
 "use client";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { ALL_PEOPLE } from "@/lib/people";
 
@@ -24,8 +24,10 @@ interface Directive { id: number; venture_id: string | null; author: string; typ
 interface CrewEvent { id: number; crew_id: string; venture_id: string | null; from_status: string | null; to_status: string; source: string; ts: string; }
 interface Metric { id: number; crew_id: string; venture_id: string | null; label: string; value: number; period: string; note: string | null; created_at: string; }
 interface Payout { id: number; crew_id: string; venture_id: string | null; amount: number; note: string | null; paid_at: string; recorded_by: string; }
+type TaskPriority = "low" | "normal" | "high" | "urgent";
 interface Task {
   id: number; venture_id: string; title: string; description: string; status: TaskStatus;
+  priority: TaskPriority; due_date: string | null; parent_task_id: number | null;
   created_by: string; assigned_to: string; handed_off_by: string | null; handed_off_at: string | null;
   created_at: string; updated_at: string;
 }
@@ -35,6 +37,10 @@ interface Tool {
   id: number; name: string; category: string; url: string | null; cost: number;
   billing_cycle: BillingCycle; renews_on: string | null; account_owner: string | null;
   notes: string; status: ToolStatus; created_at: string; updated_at: string;
+}
+interface WikiPage {
+  id: number; venture_id: string | null; title: string; content: string;
+  created_by: string; updated_by: string | null; created_at: string; updated_at: string;
 }
 
 const STATUS_LABEL: Record<CrewStatus, string> = { waiting: "Wachtend", active: "Geïsoleerd · Actief", bottleneck: "Active Bottleneck", auto: "Geautomatiseerd" };
@@ -47,6 +53,9 @@ const TASK_STATUS_TAG: Record<TaskStatus, string> = { todo: "t-todo", in_progres
 // dashboard: idle = nog niet begonnen, accent = actief werk, warn = wacht op
 // oppak-actie, good = klaar) -- niet zomaar 4 willekeurige tinten.
 const TASK_COLOR: Record<TaskStatus, string> = { todo: "var(--idle)", in_progress: "var(--accent)", handed_off: "var(--warn)", done: "var(--good)" };
+const TASK_PRIORITIES: TaskPriority[] = ["low", "normal", "high", "urgent"];
+const TASK_PRIORITY_LABEL: Record<TaskPriority, string> = { low: "Laag", normal: "Normaal", high: "Hoog", urgent: "Urgent" };
+const TASK_PRIORITY_TAG: Record<TaskPriority, string> = { low: "t-p-low", normal: "t-p-normal", high: "t-p-high", urgent: "t-p-urgent" };
 const PEOPLE_NAME: Record<string, string> = Object.fromEntries(ALL_PEOPLE.map((p) => [p.id, p.name]));
 const TOOL_CATEGORIES = ["hosting", "database", "payments", "ai", "communicatie", "domein", "overig"] as const;
 const TOOL_CATEGORY_LABEL: Record<string, string> = {
@@ -74,6 +83,33 @@ function relTime(iso: string | null) {
   if (h < 24) return h + " u geleden";
   return Math.floor(h / 24) + " dagen geleden";
 }
+// Kleine, zelfgeschreven renderer voor wiki-content -- geen dependency zoals
+// react-markdown nodig voor wat 5 mensen aan interne notities bijhouden.
+// Ondersteunt: # / ## koppen, **vet**, "- " bullets, auto-linked URLs.
+// Rendert als React-nodes (nooit dangerouslySetInnerHTML).
+function renderInline(text: string, keyPrefix: string): ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*|https?:\/\/\S+)/g);
+  return parts.filter(Boolean).map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={`${keyPrefix}-${i}`}>{part.slice(2, -2)}</strong>;
+    }
+    if (/^https?:\/\//.test(part)) {
+      return <a key={`${keyPrefix}-${i}`} href={part} target="_blank" rel="noreferrer">{part}</a>;
+    }
+    return <span key={`${keyPrefix}-${i}`}>{part}</span>;
+  });
+}
+function renderWikiContent(content: string): ReactNode {
+  const lines = content.split("\n");
+  return lines.map((line, i) => {
+    const key = `l${i}`;
+    if (line.startsWith("## ")) return <h4 key={key} style={{ margin: "14px 0 4px" }}>{renderInline(line.slice(3), key)}</h4>;
+    if (line.startsWith("# ")) return <h3 key={key} style={{ margin: "16px 0 6px" }}>{renderInline(line.slice(2), key)}</h3>;
+    if (line.startsWith("- ")) return <div key={key} style={{ paddingLeft: 16 }}>• {renderInline(line.slice(2), key)}</div>;
+    if (line.trim() === "") return <br key={key} />;
+    return <div key={key}>{renderInline(line, key)}</div>;
+  });
+}
 function isoWeek(d: Date) {
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const day = date.getUTCDay() || 7;
@@ -87,7 +123,7 @@ export default function Dashboard(props: {
   initialMe: string | null;
   initialCrew: Crew[]; initialVentures: Venture[]; initialCommits: CommitRow[];
   initialDirectives: Directive[]; initialCrewEvents: CrewEvent[]; initialMetrics: Metric[]; initialPayouts: Payout[];
-  initialTasks: Task[]; initialTools: Tool[];
+  initialTasks: Task[]; initialTools: Tool[]; initialWikiPages: WikiPage[];
 }) {
   const [crew, setCrew] = useState(props.initialCrew);
   const [ventures, setVentures] = useState(props.initialVentures);
@@ -98,6 +134,7 @@ export default function Dashboard(props: {
   const [payouts, setPayouts] = useState(props.initialPayouts);
   const [tasks, setTasks] = useState(props.initialTasks);
   const [tools, setTools] = useState(props.initialTools);
+  const [wikiPages, setWikiPages] = useState(props.initialWikiPages);
   // Server-geverifieerd (flowsys_identity-cookie) -- geen los te kiezen dropdown
   // meer. Kan alleen veranderen via een echte login, dus geen state nodig.
   const me = props.initialMe ?? "";
@@ -112,8 +149,15 @@ export default function Dashboard(props: {
   const [openTaskId, setOpenTaskId] = useState<number | null>(null);
   const [editTaskId, setEditTaskId] = useState<number | null>(null);
   const [editToolId, setEditToolId] = useState<number | null>(null);
+  const [taskFilterAssignee, setTaskFilterAssignee] = useState("");
+  const [taskFilterPriority, setTaskFilterPriority] = useState<TaskPriority | "">("");
+  const [taskFilterOverdue, setTaskFilterOverdue] = useState(false);
+  const [subtaskDrafts, setSubtaskDrafts] = useState<Record<number, string>>({});
+  const [openWikiId, setOpenWikiId] = useState<number | null>(null);
+  const [editWikiId, setEditWikiId] = useState<number | null>(null);
   const [directiveText, setDirectiveText] = useState("");
   const [syncingMrr, setSyncingMrr] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -131,6 +175,7 @@ export default function Dashboard(props: {
       payouts: () => supabaseBrowser.from("payouts").select("*").order("paid_at", { ascending: false }).limit(50).then(({ data }) => data && setPayouts(data as Payout[])),
       tasks: () => supabaseBrowser.from("tasks").select("*").order("created_at", { ascending: false }).limit(200).then(({ data }) => data && setTasks(data as Task[])),
       tools: () => supabaseBrowser.from("tools").select("*").order("name").then(({ data }) => data && setTools(data as Tool[])),
+      wiki_pages: () => supabaseBrowser.from("wiki_pages").select("*").order("updated_at", { ascending: false }).then(({ data }) => data && setWikiPages(data as WikiPage[])),
     };
     const channel = supabaseBrowser
       .channel("flowsys-dashboard")
@@ -143,6 +188,7 @@ export default function Dashboard(props: {
       .on("postgres_changes", { event: "*", schema: "public", table: "payouts" }, refetch.payouts)
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, refetch.tasks)
       .on("postgres_changes", { event: "*", schema: "public", table: "tools" }, refetch.tools)
+      .on("postgres_changes", { event: "*", schema: "public", table: "wiki_pages" }, refetch.wiki_pages)
       .subscribe();
     return () => { supabaseBrowser.removeChannel(channel); };
   }, []);
@@ -189,6 +235,26 @@ export default function Dashboard(props: {
   const visibleCommits = (selectedVentureId ? commits.filter((c) => c.venture_id === selectedVentureId) : commits).slice(0, 6);
   const visibleTasks = selectedVentureId ? tasks.filter((t) => t.venture_id === selectedVentureId) : tasks;
   const myOpenTasks = tasks.filter((t) => t.assigned_to === me && t.status !== "done");
+  const bottleneckCount = crew.filter((c) => c.status === "bottleneck").length;
+  const openTaskCount = visibleTasks.filter((t) => t.status !== "done").length;
+  const todayStr = new Date(now).toISOString().slice(0, 10);
+  // Filters gelden alleen voor het bord -- "Voor jou" blijft altijd ongefilterd
+  // (dat is al impliciet "van mij"), en subtaken concurreren niet om kolomruimte.
+  const boardTasks = visibleTasks
+    .filter((t) => !t.parent_task_id)
+    .filter((t) => !taskFilterAssignee || t.assigned_to === taskFilterAssignee)
+    .filter((t) => !taskFilterPriority || t.priority === taskFilterPriority)
+    .filter((t) => !taskFilterOverdue || (!!t.due_date && t.due_date < todayStr && t.status !== "done"));
+
+  const SECTIONS = [
+    { id: "00", title: "Alles-oké?" }, { id: "01", title: "Telemetrie" }, { id: "02", title: "Squad Status" },
+    { id: "03", title: "App Pipeline" }, { id: "04", title: "Taken" }, { id: "05", title: "Prestaties" },
+    { id: "06", title: "Uitbetalingen" }, { id: "07", title: "VETO Console" }, { id: "08", title: "Tools & Abonnementen" },
+    { id: "09", title: "Wiki" },
+  ];
+  // Algemene pagina's (venture_id null) blijven altijd zichtbaar, ook met een
+  // venture geselecteerd -- een kennisbank moet bedrijfsbrede naslag niet verbergen.
+  const visibleWikiPages = wikiPages.filter((w) => !selectedVentureId || w.venture_id === selectedVentureId || w.venture_id === null);
 
   async function saveCrew(c: Crew, status: CrewStatus, task: string, note: string, ventureId: string | null) {
     await post("/api/crew", { id: c.id, status, task, note, current_venture_id: ventureId });
@@ -222,9 +288,18 @@ export default function Dashboard(props: {
     const ok = await post("/api/tasks", body);
     return ok;
   }
-  async function saveTask(t: Task, patch: { title?: string; description?: string; status?: TaskStatus; assigned_to?: string }) {
+  async function saveTask(t: Task, patch: { title?: string; description?: string; status?: TaskStatus; assigned_to?: string; priority?: TaskPriority; due_date?: string | null }) {
     await post(`/api/tasks/${t.id}`, patch);
     setEditTaskId(null);
+  }
+  async function toggleSubtask(sub: Task) {
+    await post(`/api/tasks/${sub.id}`, { status: sub.status === "done" ? "todo" : "done" });
+  }
+  async function addSubtask(parent: Task) {
+    const title = (subtaskDrafts[parent.id] || "").trim();
+    if (!title) return;
+    const ok = await post("/api/tasks", { venture_id: parent.venture_id, title, description: "", assigned_to: parent.assigned_to, parent_task_id: parent.id });
+    if (ok) setSubtaskDrafts((d) => ({ ...d, [parent.id]: "" }));
   }
   async function createTool(body: Record<string, unknown>) {
     return post("/api/tools", body);
@@ -232,6 +307,18 @@ export default function Dashboard(props: {
   async function saveTool(t: Tool, patch: Record<string, unknown>) {
     await post(`/api/tools/${t.id}`, patch);
     setEditToolId(null);
+  }
+  async function createWiki(body: Record<string, unknown>) {
+    return post("/api/wiki", body);
+  }
+  async function saveWiki(w: WikiPage, patch: Record<string, unknown>) {
+    await post(`/api/wiki/${w.id}`, patch);
+    setEditWikiId(null);
+  }
+  async function deleteWiki(w: WikiPage) {
+    if (!window.confirm(`"${w.title}" verwijderen?`)) return;
+    await fetch(`/api/wiki/${w.id}`, { method: "DELETE" });
+    setOpenWikiId(null);
   }
 
   return (
@@ -277,7 +364,7 @@ export default function Dashboard(props: {
       </div>
 
       {/* 00 OVERVIEW */}
-      <div className="section-head"><span className="section-num">00</span><span className="section-title">Alles-oké? — Venture Overzicht</span><span className="section-line" /></div>
+      <div className="section-head" id="section-00"><span className="section-num">00</span><span className="section-title">Alles-oké? — Venture Overzicht</span></div>
       <p className="section-sub">Klik een venture om de rest van de pagina daarop te focussen{selectedVenture ? " — klik nogmaals om te wissen" : ""}</p>
       <div className="venture-strip">
         {ventures.map((v) => {
@@ -302,7 +389,7 @@ export default function Dashboard(props: {
       </div>
 
       {/* TELEMETRY */}
-      <div className="section-head"><span className="section-num">01</span><span className="section-title">Telemetrie{selectedVenture ? ` — ${selectedVenture.name}` : ""}</span><span className="section-line" /></div>
+      <div className="section-head" id="section-01"><span className="section-num">01</span><span className="section-title">Telemetrie{selectedVenture ? ` — ${selectedVenture.name}` : ""}</span></div>
       <p className="section-sub">{selectedVenture ? "MRR van deze venture" : "Holding-MRR — som van alle dochterbedrijven"}</p>
       <div className="telemetry">
         <div className="tile">
@@ -343,7 +430,7 @@ export default function Dashboard(props: {
       <div className="main-grid">
         <div>
           {/* SQUAD */}
-          <div className="section-head"><span className="section-num">02</span><span className="section-title">Estafette — Squad Status</span><span className="section-line" /></div>
+          <div className="section-head" id="section-02"><span className="section-num">02</span><span className="section-title">Estafette — Squad Status</span>{bottleneckCount > 0 && <span className="section-count">{bottleneckCount}</span>}</div>
           <p className="section-sub">Aangedreven door echte Git-commits met <code>[PASS:NAAM]</code></p>
           {owner ? (
             <div className="owner-bar">⚠ Huidige code-eigenaar: <strong>{owner.name}</strong>{owner.note ? <> — <code>{owner.note}</code></> : null}{owner.current_venture_id ? <> op <strong>{ventureName(owner.current_venture_id)}</strong></> : null}</div>
@@ -397,7 +484,7 @@ export default function Dashboard(props: {
 
         <div>
           {/* PIPELINE */}
-          <div className="section-head"><span className="section-num">03</span><span className="section-title">App Pipeline</span><span className="section-line" /></div>
+          <div className="section-head" id="section-03"><span className="section-num">03</span><span className="section-title">App Pipeline</span></div>
           <p className="section-sub">M&amp;A-pipeline, van scouting tot exit-isolatie</p>
           <div className="pipeline">
             {(["scouting", "sprint", "exit-ready"] as const).map((stage, idx) => (
@@ -438,7 +525,7 @@ export default function Dashboard(props: {
       </div>
 
       {/* TAKEN */}
-      <div className="section-head"><span className="section-num">04</span><span className="section-title">Taken{selectedVenture ? ` — ${selectedVenture.name}` : ""}</span><span className="section-line" /></div>
+      <div className="section-head" id="section-04"><span className="section-num">04</span><span className="section-title">Taken{selectedVenture ? ` — ${selectedVenture.name}` : ""}</span>{openTaskCount > 0 && <span className="section-count">{openTaskCount}</span>}</div>
       <p className="section-sub">Wat moet er nog gebeuren, en van wie naar wie</p>
 
       {myOpenTasks.length > 0 ? (
@@ -455,16 +542,36 @@ export default function Dashboard(props: {
         <div className="for-you empty">Niks voor jou openstaand — mooi zo.</div>
       )}
 
+      <div className="form-inline" style={{ marginTop: 0, marginBottom: 12 }}>
+        <select value={taskFilterAssignee} onChange={(e) => setTaskFilterAssignee(e.target.value)}>
+          <option value="">— iedereen —</option>
+          {crew.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select value={taskFilterPriority} onChange={(e) => setTaskFilterPriority(e.target.value as TaskPriority | "")}>
+          <option value="">— alle prioriteiten —</option>
+          {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{TASK_PRIORITY_LABEL[p]}</option>)}
+        </select>
+        <label className="check-label"><input type="checkbox" checked={taskFilterOverdue} onChange={(e) => setTaskFilterOverdue(e.target.checked)} /> Alleen overdue</label>
+      </div>
+
       <div className="pipeline cols-4">
         {TASK_STATUSES.map((stage, idx) => (
           <div key={stage}>
             <div className="col-head"><b style={{ color: TASK_COLOR[stage] }}>{pad(idx + 1)}</b> {TASK_STATUS_LABEL[stage]}</div>
             <div className="col-body">
-              {visibleTasks.filter((t) => t.status === stage).map((t) => (
+              {boardTasks.filter((t) => t.status === stage).map((t) => {
+                const subtasks = tasks.filter((s) => s.parent_task_id === t.id);
+                const subtasksDone = subtasks.filter((s) => s.status === "done").length;
+                const isOverdue = !!t.due_date && t.due_date < todayStr && t.status !== "done";
+                const isDueSoon = !!t.due_date && !isOverdue && t.due_date <= new Date(now + 2 * 86400000).toISOString().slice(0, 10);
+                return (
                 <div className="app-card" style={{ borderLeft: `3px solid ${TASK_COLOR[t.status]}` }} key={t.id}>
                   <div className="app-head" onClick={() => setOpenTaskId(openTaskId === t.id ? null : t.id)}>
                     <span className="app-name-row">
                       <span className="app-name">{t.title}</span>
+                      {subtasks.length > 0 && <span className="subtask-count">{subtasksDone}/{subtasks.length}</span>}
+                      {(t.priority === "high" || t.priority === "urgent") && <span className={"tag " + TASK_PRIORITY_TAG[t.priority]}>{TASK_PRIORITY_LABEL[t.priority]}</span>}
+                      {t.due_date && <span className={"due-chip" + (isOverdue ? " due-over" : isDueSoon ? " due-soon" : "")}>{new Date(t.due_date).toLocaleDateString("nl-BE", { day: "2-digit", month: "2-digit" })}</span>}
                       {!selectedVenture && <span className="task-venture-badge">{ventureName(t.venture_id)}</span>}
                     </span>
                     <span className={"chev" + (openTaskId === t.id ? " open" : "")}>⌄</span>
@@ -478,13 +585,31 @@ export default function Dashboard(props: {
                         <div className="detail-row"><span>Toegewezen aan</span><span>{crew.find((c) => c.id === t.assigned_to)?.name ?? t.assigned_to}</span></div>
                         <div className="detail-row"><span>Aangemaakt door</span><span>{PEOPLE_NAME[t.created_by] ?? t.created_by}</span></div>
                         {t.handed_off_by && <div className="detail-row"><span>Laatst doorgestuurd door</span><span>{crew.find((c) => c.id === t.handed_off_by)?.name ?? t.handed_off_by} · {relTime(t.handed_off_at)}</span></div>}
+                        <div className="subtask-list">
+                          {subtasks.map((s) => (
+                            <div className={"subtask-row" + (s.status === "done" ? " done" : "")} key={s.id}>
+                              <input type="checkbox" checked={s.status === "done"} onChange={() => toggleSubtask(s)} />
+                              <label>{s.title}</label>
+                            </div>
+                          ))}
+                          <div className="subtask-add">
+                            <input
+                              className="field" placeholder="+ subtaak toevoegen"
+                              value={subtaskDrafts[t.id] || ""}
+                              onChange={(e) => setSubtaskDrafts((d) => ({ ...d, [t.id]: e.target.value }))}
+                              onKeyDown={(e) => { if (e.key === "Enter") addSubtask(t); }}
+                            />
+                            <button className="btn" onClick={() => addSubtask(t)}>+</button>
+                          </div>
+                        </div>
                         <div className="edit-actions" style={{ marginTop: 10 }}><button className="btn" onClick={() => setEditTaskId(t.id)}>Bewerken / doorsturen</button></div>
                       </div>
                     )
                   )}
                 </div>
-              ))}
-              {visibleTasks.filter((t) => t.status === stage).length === 0 && <div className="col-empty">—</div>}
+                );
+              })}
+              {boardTasks.filter((t) => t.status === stage).length === 0 && <div className="col-empty">—</div>}
             </div>
           </div>
         ))}
@@ -492,7 +617,7 @@ export default function Dashboard(props: {
       <TaskCreateForm crew={crew} ventures={ventures} defaultVentureId={selectedVentureId} onSubmit={createTask} />
 
       {/* PRESTATIES */}
-      <div className="section-head"><span className="section-num">05</span><span className="section-title">Prestaties</span><span className="section-line" /></div>
+      <div className="section-head" id="section-05"><span className="section-num">05</span><span className="section-title">Prestaties</span></div>
       <p className="section-sub">Commits uit Git zijn automatisch; outreach/scouting log je handmatig hieronder</p>
       <div className="perf-grid">
         {crew.map((c) => {
@@ -520,7 +645,7 @@ export default function Dashboard(props: {
       <MetricForm crew={crew} ventures={ventures} defaultPeriod={isoWeek(new Date())} onSubmit={(body) => post("/api/metrics", body)} />
 
       {/* UITBETALINGEN */}
-      <div className="section-head"><span className="section-num">06</span><span className="section-title">Uitbetalingen</span><span className="section-line" /></div>
+      <div className="section-head" id="section-06"><span className="section-num">06</span><span className="section-title">Uitbetalingen</span></div>
       <p className="section-sub">Alleen een overzicht — dit voert nooit zelf een betaling uit, jij betaalt en logt het hier</p>
       <div className="ledger-wrap">
         <table className="ledger-table">
@@ -530,11 +655,11 @@ export default function Dashboard(props: {
               const royalty = v.pitched_by === "zende" ? v.mrr * 0.05 : 0;
               return (
                 <tr key={v.id}>
-                  <td>{v.name}</td>
-                  <td className="num">{fmtEUR(v.mrr)}</td>
-                  <td>{crew.find((c) => c.id === v.pitched_by)?.name ?? "—"}</td>
-                  <td className="num">{royalty > 0 ? fmtEUR(royalty) : "—"}</td>
-                  <td className="num">{fmtEUR(v.mrr - royalty)}</td>
+                  <td data-label="Venture">{v.name}</td>
+                  <td className="num" data-label="MRR">{fmtEUR(v.mrr)}</td>
+                  <td data-label="Gepitcht door">{crew.find((c) => c.id === v.pitched_by)?.name ?? "—"}</td>
+                  <td className="num" data-label="Zende royalty (5%)">{royalty > 0 ? fmtEUR(royalty) : "—"}</td>
+                  <td className="num" data-label="House-aandeel">{fmtEUR(v.mrr - royalty)}</td>
                 </tr>
               );
             })}
@@ -555,7 +680,7 @@ export default function Dashboard(props: {
       </div>
 
       {/* CONSOLE */}
-      <div className="section-head"><span className="section-num">07</span><span className="section-title">VETO Console</span><span className="section-line" /></div>
+      <div className="section-head" id="section-07"><span className="section-num">07</span><span className="section-title">VETO Console</span></div>
       <p className="section-sub">Matthias — rank 1, veto-macht{selectedVenture ? ` — gericht op ${selectedVenture.name}` : " — algemeen"}</p>
       <div className="console">
         <div className="console-row">
@@ -580,9 +705,9 @@ export default function Dashboard(props: {
       </div>
 
       {/* TOOLS & ABONNEMENTEN */}
-      <div className="section-head"><span className="section-num">08</span><span className="section-title">Tools &amp; Abonnementen</span><span className="section-line" /></div>
+      <div className="section-head" id="section-08"><span className="section-num">08</span><span className="section-title">Tools &amp; Abonnementen</span></div>
       <p className="section-sub">Alle programma&apos;s en diensten die Flow Systems gebruikt, op één plek</p>
-      <div className="telemetry" style={{ gridTemplateColumns: "repeat(2, 1fr)", marginBottom: 16 }}>
+      <div className="telemetry cols-2" style={{ marginBottom: 16 }}>
         <div className="tile">
           <div className="tile-label"><span>Totaal / maand</span></div>
           <div className="tile-value">{fmtEUR(monthlyToolsCost)}</div>
@@ -603,7 +728,7 @@ export default function Dashboard(props: {
             {tools.map((t) => (
               <Fragment key={t.id}>
                 <tr style={{ opacity: t.status === "cancelled" ? 0.5 : 1 }}>
-                  <td>
+                  <td data-label="Naam">
                     <div style={{ fontWeight: 600, color: "var(--text)" }}>{t.name}</div>
                     <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 3 }}>
                       <span className="task-venture-badge">{TOOL_CATEGORY_LABEL[t.category] ?? t.category}</span>
@@ -611,9 +736,9 @@ export default function Dashboard(props: {
                       {t.url && <a href={t.url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: "var(--accent)" }}>Open →</a>}
                     </div>
                   </td>
-                  <td className="num">{t.cost > 0 ? `${fmtEUR(t.cost)} ${BILLING_LABEL[t.billing_cycle]}` : "gratis"}</td>
-                  <td>{t.renews_on ? new Date(t.renews_on).toLocaleDateString("nl-BE") : "—"}</td>
-                  <td>{t.account_owner ? (PEOPLE_NAME[t.account_owner] ?? t.account_owner) : "—"}</td>
+                  <td className="num" data-label="Kosten">{t.cost > 0 ? `${fmtEUR(t.cost)} ${BILLING_LABEL[t.billing_cycle]}` : "gratis"}</td>
+                  <td data-label="Vervalt">{t.renews_on ? new Date(t.renews_on).toLocaleDateString("nl-BE") : "—"}</td>
+                  <td data-label="Beheerder">{t.account_owner ? (PEOPLE_NAME[t.account_owner] ?? t.account_owner) : "—"}</td>
                   <td style={{ textAlign: "right" }}><button className="icon-btn" onClick={() => setEditToolId(editToolId === t.id ? null : t.id)} aria-label="Bewerk">✎</button></td>
                 </tr>
                 {editToolId === t.id && (
@@ -627,7 +752,49 @@ export default function Dashboard(props: {
       </div>
       <ToolCreateForm onSubmit={createTool} />
 
+      {/* WIKI */}
+      <div className="section-head" id="section-09"><span className="section-num">09</span><span className="section-title">Wiki</span></div>
+      <p className="section-sub">Gedeelde kennisbank — algemene pagina&apos;s of per venture</p>
+      <div className="col-body">
+        {visibleWikiPages.map((w) => (
+          <div className="app-card" key={w.id}>
+            <div className="app-head" onClick={() => setOpenWikiId(openWikiId === w.id ? null : w.id)}>
+              <span className="app-name-row">
+                <span className="app-name">{w.title}</span>
+                <span className="task-venture-badge">{w.venture_id ? ventureName(w.venture_id) : "Algemeen"}</span>
+              </span>
+              <span className={"chev" + (openWikiId === w.id ? " open" : "")}>⌄</span>
+            </div>
+            {openWikiId === w.id && (
+              editWikiId === w.id ? (
+                <WikiPageForm page={w} ventures={ventures} onCancel={() => setEditWikiId(null)} onSave={(patch) => saveWiki(w, patch)} />
+              ) : (
+                <div className="detail-inner">
+                  <div className="wiki-content">{renderWikiContent(w.content)}</div>
+                  <div className="detail-row"><span>Laatst bijgewerkt</span><span>{relTime(w.updated_at)}{w.updated_by ? ` · ${PEOPLE_NAME[w.updated_by] ?? w.updated_by}` : ""}</span></div>
+                  <div className="edit-actions" style={{ marginTop: 10 }}>
+                    <button className="btn" onClick={() => setEditWikiId(w.id)}>Bewerken</button>
+                    <button className="btn ghost" onClick={() => deleteWiki(w)}>Verwijderen</button>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        ))}
+        {visibleWikiPages.length === 0 && <div className="col-empty">Nog geen pagina&apos;s.</div>}
+      </div>
+      <WikiCreateForm ventures={ventures} defaultVentureId={selectedVentureId} onSubmit={createWiki} />
+
       <footer>FLOW SYSTEMS B.V. — INTERN GEBRUIK — NIET DELEN BUITEN KERNTEAM</footer>
+
+      <button className="mobile-nav-btn" onClick={() => setNavOpen(!navOpen)} aria-label="Spring naar sectie">☰</button>
+      {navOpen && (
+        <div className="mobile-nav-popover">
+          {SECTIONS.map((s) => (
+            <a key={s.id} href={`#section-${s.id}`} onClick={() => setNavOpen(false)}>{s.id} · {s.title}</a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -711,12 +878,14 @@ function VentureForm({ venture, crew, onCancel, onSave }: { venture: Venture; cr
 
 function TaskForm({ task, crew, onCancel, onSave }: {
   task: Task; crew: Crew[]; onCancel: () => void;
-  onSave: (patch: { title?: string; description?: string; status?: TaskStatus; assigned_to?: string }) => void;
+  onSave: (patch: { title?: string; description?: string; status?: TaskStatus; assigned_to?: string; priority?: TaskPriority; due_date?: string | null }) => void;
 }) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [assignedTo, setAssignedTo] = useState(task.assigned_to);
+  const [priority, setPriority] = useState<TaskPriority>(task.priority);
+  const [dueDate, setDueDate] = useState(task.due_date ?? "");
   return (
     <div className="edit-form">
       <div><label>Titel</label><input className="field" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
@@ -726,13 +895,19 @@ function TaskForm({ task, crew, onCancel, onSave }: {
           {TASK_STATUSES.map((s) => <option key={s} value={s}>{TASK_STATUS_LABEL[s]}</option>)}
         </select>
       </div>
+      <div><label>Prioriteit</label>
+        <select value={priority} onChange={(e) => setPriority(e.target.value as TaskPriority)}>
+          {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{TASK_PRIORITY_LABEL[p]}</option>)}
+        </select>
+      </div>
+      <div><label>Deadline (optioneel)</label><input className="field" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>
       <div><label>Toegewezen aan — kiezen = doorsturen</label>
         <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
           {crew.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
       <div className="edit-actions">
-        <button className="btn primary" onClick={() => onSave({ title, description, status, assigned_to: assignedTo })}>Opslaan</button>
+        <button className="btn primary" onClick={() => onSave({ title, description, status, assigned_to: assignedTo, priority, due_date: dueDate || null })}>Opslaan</button>
         <button className="btn ghost" onClick={onCancel}>Annuleren</button>
       </div>
     </div>
@@ -741,19 +916,20 @@ function TaskForm({ task, crew, onCancel, onSave }: {
 
 function TaskCreateForm({ crew, ventures, defaultVentureId, onSubmit }: {
   crew: Crew[]; ventures: Venture[]; defaultVentureId: string | null;
-  onSubmit: (body: { venture_id: string; title: string; description: string; assigned_to: string }) => Promise<boolean>;
+  onSubmit: (body: { venture_id: string; title: string; description: string; assigned_to: string; priority: TaskPriority }) => Promise<boolean>;
 }) {
   const [ventureId, setVentureId] = useState(defaultVentureId ?? ventures[0]?.id ?? "");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assignedTo, setAssignedTo] = useState(crew[0]?.id ?? "");
+  const [priority, setPriority] = useState<TaskPriority>("normal");
 
   useEffect(() => { if (defaultVentureId) setVentureId(defaultVentureId); }, [defaultVentureId]);
 
   async function submit() {
     if (!title.trim()) return;
-    const ok = await onSubmit({ venture_id: ventureId, title: title.trim(), description, assigned_to: assignedTo });
-    if (ok) { setTitle(""); setDescription(""); }
+    const ok = await onSubmit({ venture_id: ventureId, title: title.trim(), description, assigned_to: assignedTo, priority });
+    if (ok) { setTitle(""); setDescription(""); setPriority("normal"); }
   }
 
   return (
@@ -761,6 +937,7 @@ function TaskCreateForm({ crew, ventures, defaultVentureId, onSubmit }: {
       <select value={ventureId} onChange={(e) => setVentureId(e.target.value)}>{ventures.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select>
       <input className="field" placeholder="Titel van de taak" value={title} onChange={(e) => setTitle(e.target.value)} />
       <input className="field" placeholder="omschrijving (optioneel)" value={description} onChange={(e) => setDescription(e.target.value)} />
+      <select value={priority} onChange={(e) => setPriority(e.target.value as TaskPriority)}>{TASK_PRIORITIES.map((p) => <option key={p} value={p}>{TASK_PRIORITY_LABEL[p]}</option>)}</select>
       <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>{crew.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
       <button className="btn primary" onClick={submit}>+ Taak aanmaken</button>
     </div>
@@ -839,6 +1016,58 @@ function ToolCreateForm({ onSubmit }: { onSubmit: (body: Record<string, unknown>
       <select value={billingCycle} onChange={(e) => setBillingCycle(e.target.value as BillingCycle)}>{(Object.keys(BILLING_LABEL) as BillingCycle[]).map((b) => <option key={b} value={b}>{b}</option>)}</select>
       <select value={accountOwner} onChange={(e) => setAccountOwner(e.target.value)}><option value="">— beheerder —</option>{ALL_PEOPLE.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
       <button className="btn primary" onClick={submit}>+ Tool toevoegen</button>
+    </div>
+  );
+}
+
+function WikiPageForm({ page, ventures, onCancel, onSave }: {
+  page: WikiPage; ventures: Venture[]; onCancel: () => void; onSave: (patch: Record<string, unknown>) => void;
+}) {
+  const [title, setTitle] = useState(page.title);
+  const [content, setContent] = useState(page.content);
+  const [ventureId, setVentureId] = useState(page.venture_id ?? "");
+  return (
+    <div className="edit-form">
+      <div><label>Titel</label><input className="field" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
+      <div><label>Venture</label>
+        <select value={ventureId} onChange={(e) => setVentureId(e.target.value)}>
+          <option value="">— algemeen —</option>
+          {ventures.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+        </select>
+      </div>
+      <div><label>Inhoud — # kop, ## subkop, **vet**, - bullet</label>
+        <textarea className="field" value={content} onChange={(e) => setContent(e.target.value)} />
+      </div>
+      <div className="edit-actions">
+        <button className="btn primary" onClick={() => onSave({ title, content, venture_id: ventureId || null })}>Opslaan</button>
+        <button className="btn ghost" onClick={onCancel}>Annuleren</button>
+      </div>
+    </div>
+  );
+}
+
+function WikiCreateForm({ ventures, defaultVentureId, onSubmit }: {
+  ventures: Venture[]; defaultVentureId: string | null; onSubmit: (body: Record<string, unknown>) => Promise<boolean>;
+}) {
+  const [ventureId, setVentureId] = useState(defaultVentureId ?? "");
+  const [title, setTitle] = useState("");
+
+  useEffect(() => { setVentureId(defaultVentureId ?? ""); }, [defaultVentureId]);
+
+  async function submit() {
+    if (!title.trim()) return;
+    const ok = await onSubmit({ title: title.trim(), venture_id: ventureId || null, content: "" });
+    if (ok) setTitle("");
+  }
+
+  return (
+    <div className="form-inline">
+      <select value={ventureId} onChange={(e) => setVentureId(e.target.value)}>
+        <option value="">— algemeen —</option>
+        {ventures.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+      </select>
+      <input className="field" placeholder="Titel van de pagina" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <button className="btn primary" onClick={submit}>+ Pagina aanmaken</button>
     </div>
   );
 }

@@ -106,6 +106,9 @@ create table if not exists tasks (
   title text not null,
   description text not null default '',
   status text not null default 'todo',        -- todo | in_progress | handed_off | done
+  priority text not null default 'normal',    -- low | normal | high | urgent
+  due_date date,
+  parent_task_id bigint references tasks(id) on delete cascade, -- subtaak van, alleen bij aanmaken instelbaar
   created_by text not null,                   -- vrije tekst zoals directives.author -- ook Matthias mag
                                                -- een taak loggen, en die is (bewust) geen crew-rij
   assigned_to text not null references crew(id), -- van wie de "voor jou"-lijst dit is
@@ -129,6 +132,20 @@ create table if not exists tools (
   account_owner text,
   notes text not null default '',
   status text not null default 'active', -- active | cancelled
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Gedeelde kennisbank -- korte notities per venture of algemeen. Zelfde nullable-FK-
+-- patroon als directives/commits/crew_events/metrics/payouts: venture_id null =
+-- company-wide pagina.
+create table if not exists wiki_pages (
+  id bigint generated always as identity primary key,
+  venture_id text references ventures(id),
+  title text not null,
+  content text not null default '',
+  created_by text not null,
+  updated_by text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -164,6 +181,7 @@ alter table metrics enable row level security;
 alter table payouts enable row level security;
 alter table tasks enable row level security;
 alter table tools enable row level security;
+alter table wiki_pages enable row level security;
 
 create policy "public read crew" on crew for select using (true);
 create policy "public read ventures" on ventures for select using (true);
@@ -174,6 +192,7 @@ create policy "public read metrics" on metrics for select using (true);
 create policy "public read payouts" on payouts for select using (true);
 create policy "public read tasks" on tasks for select using (true);
 create policy "public read tools" on tools for select using (true);
+create policy "public read wiki_pages" on wiki_pages for select using (true);
 
 -- Realtime: let the dashboard subscribe to live changes instead of polling.
 alter publication supabase_realtime add table crew;
@@ -183,4 +202,5 @@ alter publication supabase_realtime add table directives;
 alter publication supabase_realtime add table metrics;
 alter publication supabase_realtime add table payouts;
 alter publication supabase_realtime add table tools;
+alter publication supabase_realtime add table wiki_pages;
 alter publication supabase_realtime add table tasks;

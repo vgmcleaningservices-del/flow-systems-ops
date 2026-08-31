@@ -24,6 +24,11 @@ export async function POST(req: NextRequest) {
     description: (body?.description || "").trim(),
     assigned_to: assignedTo,
     created_by: identity,
+    priority: typeof body?.priority === "string" ? body.priority : "normal",
+    due_date: body?.due_date || null,
+    // Alleen bij aanmaken instelbaar -- niet in de update-route, om herouderen
+    // (en dus mogelijke cirkels) uit te sluiten.
+    parent_task_id: body?.parent_task_id ? Number(body.parent_task_id) : null,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

@@ -1,13 +1,15 @@
 :root {
-  --bg: #f5f5f7;
+  /* Neutrals carry a slight hue-bias toward the accent (hsl 211°) instead of
+     pure gray -- reads as chosen, not default. */
+  --bg: hsl(211, 22%, 97%);
   --surface: #ffffff;
-  --surface-2: #fbfbfd;
-  --surface-3: #f0f0f2;
-  --border: rgba(0, 0, 0, 0.07);
-  --border-strong: rgba(0, 0, 0, 0.13);
-  --text: #1d1d1f;
-  --text-dim: #6e6e73;
-  --text-faint: #86868b;
+  --surface-2: hsl(211, 30%, 98.5%);
+  --surface-3: hsl(211, 18%, 94.5%);
+  --border: hsla(211, 25%, 18%, 0.08);
+  --border-strong: hsla(211, 25%, 18%, 0.15);
+  --text: hsl(211, 8%, 12%);
+  --text-dim: hsl(211, 6%, 44%);
+  --text-faint: hsl(211, 5%, 55%);
   --accent: #0071e3;
   --accent-hover: #0077ed;
   --accent-active: #005bbf;
@@ -29,21 +31,40 @@
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 10px 26px rgba(0, 0, 0, 0.06);
   --shadow-hover: 0 4px 10px rgba(0, 0, 0, 0.05), 0 18px 36px rgba(0, 0, 0, 0.09);
   --nav-bg: rgba(255, 255, 255, 0.75);
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Type scale -- consolidates ~8 ad-hoc font-sizes used throughout this file. */
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 13.5px;
+  --text-md: 14.5px;
+  --text-lg: 15.5px;
+  --text-xl: 17px;
+  --text-2xl: clamp(21px, 2.6vw, 27px);
+
+  /* Spacing scale -- consolidates ~15 ad-hoc gap/padding values. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #000000;
-    --surface: #1c1c1e;
-    --surface-2: #202022;
-    --surface-3: #2c2c2e;
-    --border: rgba(255, 255, 255, 0.09);
-    --border-strong: rgba(255, 255, 255, 0.16);
-    --text: #f5f5f7;
-    --text-dim: #a1a1a6;
-    --text-faint: #6e6e73;
+    --surface: hsl(211, 8%, 11%);
+    --surface-2: hsl(211, 8%, 13%);
+    --surface-3: hsl(211, 8%, 17.5%);
+    --border: hsla(211, 35%, 88%, 0.10);
+    --border-strong: hsla(211, 35%, 88%, 0.17);
+    --text: hsl(211, 15%, 96%);
+    --text-dim: hsl(211, 6%, 66%);
+    --text-faint: hsl(211, 6%, 44%);
     --accent: #0a84ff;
     --accent-hover: #3a9cff;
     --accent-active: #0064cf;
@@ -102,11 +123,34 @@ a { color: inherit; }
 @media (prefers-reduced-motion: reduce) { .dot, .tile-urgent, .crew-card.bottleneck, .tag.t-bottleneck::before { animation: none !important; } }
 
 .identity { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-faint); }
-select, input.field {
-  background: var(--surface-3); border: 1px solid var(--border); color: var(--text);
-  font-family: var(--font-sans); font-size: 13.5px; border-radius: var(--radius-sm); padding: 8px 11px;
+
+/* ---------- mobile section nav ---------- */
+/* No in-page navigation existed at all -- 9 sections were one long scroll
+   with no way to jump. Desktop-hidden; mobile gets a floating jump-menu. */
+.mobile-nav-btn {
+  display: none; position: fixed; bottom: 20px; right: 20px; z-index: 40;
+  width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--accent); color: var(--accent-text); font-size: 19px;
+  align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--shadow-hover);
 }
-select:focus, input.field:focus { outline: none; box-shadow: 0 0 0 4px var(--accent-dim); border-color: var(--accent); }
+.mobile-nav-popover {
+  position: fixed; bottom: 76px; right: 20px; z-index: 40;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow-hover); padding: 8px; display: flex; flex-direction: column; gap: 2px;
+  max-height: 60vh; overflow-y: auto; min-width: 200px;
+}
+.mobile-nav-popover a {
+  text-decoration: none; color: var(--text-dim); font-size: var(--text-base); font-weight: 590;
+  padding: 9px 12px; border-radius: var(--radius-sm); display: block;
+}
+.mobile-nav-popover a:hover { background: var(--surface-3); color: var(--text); }
+@media (max-width: 640px) { .mobile-nav-btn { display: flex; } }
+select, input.field, textarea.field {
+  background: var(--surface-3); border: 1px solid var(--border); color: var(--text);
+  font-family: var(--font-sans); font-size: var(--text-base); border-radius: var(--radius-sm); padding: 8px 11px;
+}
+textarea.field { min-height: 140px; resize: vertical; line-height: 1.5; }
+select:focus, input.field:focus, textarea.field:focus { outline: none; box-shadow: 0 0 0 4px var(--accent-dim); border-color: var(--accent); }
 button.btn {
   font-family: var(--font-sans); font-size: 13px; font-weight: 590;
   border-radius: var(--radius-pill); padding: 8px 16px; cursor: pointer; border: 1px solid var(--border);
@@ -120,13 +164,18 @@ button.btn.ghost { background: transparent; border-color: var(--border); }
 button.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
 /* ---------- section headers ---------- */
-.section-head { display: flex; flex-direction: column; gap: 3px; margin: 52px 0 8px; }
-.section-num { order: -1; font-size: 12px; font-weight: 650; letter-spacing: 0.02em; color: var(--accent); }
-.section-title { font-size: clamp(21px, 2.6vw, 27px); font-weight: 700; letter-spacing: -0.021em; color: var(--text); }
-.section-line { display: none; }
-.section-sub { font-size: 13.5px; color: var(--text-faint); margin: 0 0 16px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* 00-09 double as a navigation index (anchor targets for the mobile jump-nav),
+   not a literal step sequence -- scroll-margin-top clears the sticky topbar. */
+.section-head { display: flex; flex-direction: column; gap: 3px; margin: 52px 0 8px; scroll-margin-top: 88px; }
+.section-num { order: -1; font-size: var(--text-xs); font-weight: 650; letter-spacing: 0.02em; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+.section-title { font-size: var(--text-2xl); font-weight: 700; letter-spacing: -0.021em; color: var(--text); }
+.section-count {
+  font-family: var(--font-mono); background: var(--accent); color: var(--accent-text);
+  font-size: var(--text-2xs); font-weight: 700; border-radius: var(--radius-pill); padding: 1px 8px;
+}
+.section-sub { font-size: var(--text-base); color: var(--text-faint); margin: 0 0 16px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .section-sub b { color: var(--text-dim); font-weight: 600; }
-.section-sub code { font-family: var(--font-mono); font-size: 12px; background: var(--surface-3); padding: 1px 6px; border-radius: 6px; color: var(--text-dim); }
+.section-sub code { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--surface-3); padding: 1px 6px; border-radius: 6px; color: var(--text-dim); }
 
 /* ---------- telemetry tiles ---------- */
 .telemetry { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
@@ -149,8 +198,14 @@ button.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .icon-btn:hover { color: var(--accent); background: var(--accent-dim); }
 svg.icon { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 
+/* Real class instead of an inline style, so the Tools KPI tiles (previously
+   `style={{gridTemplateColumns:"repeat(2,1fr)"}}`) actually collapse on mobile
+   -- an inline style silently wins over a media-queried class rule otherwise. */
+.telemetry.cols-2 { grid-template-columns: repeat(2, 1fr); }
+
 .main-grid { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 30px; align-items: start; }
-@media (max-width: 880px) { .main-grid { grid-template-columns: 1fr; } .telemetry { grid-template-columns: 1fr; } .topbar { position: static; } }
+@media (max-width: 880px) { .main-grid { grid-template-columns: 1fr; } .telemetry, .telemetry.cols-2 { grid-template-columns: 1fr; } .topbar { position: static; } }
+@media (max-width: 640px) { .icon-btn { padding: 12px; } }
 
 /* ---------- owner bar ---------- */
 .owner-bar {
@@ -258,6 +313,31 @@ svg.icon { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-w
 .tag.t-done { color: var(--good); background: var(--good-dim); }
 .tag.t-done::before { background: var(--good); }
 
+/* Prioriteit -- alleen high/urgent worden ooit als badge getoond (zie
+   Dashboard.tsx): een badge moet aandacht verdienen, niet elke kaart
+   gelijk decoreren, dus low/normal hebben hier bewust geen zichtbaar effect. */
+.tag.t-p-high { color: var(--warn); background: var(--warn-dim); }
+.tag.t-p-high::before { background: var(--warn); }
+.tag.t-p-urgent { color: var(--critical); background: var(--critical-dim); }
+.tag.t-p-urgent::before { background: var(--critical); animation: pulse-red 1.4s ease-out infinite; }
+
+.due-chip { font-size: var(--text-2xs); font-weight: 650; padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; background: var(--surface-3); color: var(--text-faint); }
+.due-chip.due-soon { background: var(--warn-dim); color: var(--warn); }
+.due-chip.due-over { background: var(--critical-dim); color: var(--critical); }
+
+/* ---------- subtaken ---------- */
+.subtask-list { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+.subtask-row { display: flex; align-items: center; gap: 8px; font-size: var(--text-base); }
+.subtask-row label { color: var(--text-dim); flex: 1; }
+.subtask-row.done label { text-decoration: line-through; color: var(--text-faint); }
+.subtask-add { display: flex; gap: 6px; margin-top: 8px; }
+.subtask-add input.field { flex: 1; }
+.subtask-count { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-faint); font-weight: 600; }
+
+/* ---------- wiki ---------- */
+.wiki-content { white-space: pre-wrap; line-height: 1.6; color: var(--text-dim); margin-bottom: 4px; }
+.wiki-content h3, .wiki-content h4 { color: var(--text); }
+
 /* ---------- veto console ---------- */
 .console { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow-sm); }
 .console-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -281,11 +361,20 @@ footer { margin-top: 50px; font-size: 11.5px; color: var(--text-faint); text-ali
 .login-error { color: var(--critical); font-size: 12.5px; }
 
 /* ---------- venture overview strip ---------- */
-.venture-strip { display: flex; gap: 12px; overflow-x: auto; padding: 2px 2px 6px; }
+.venture-strip {
+  display: flex; gap: 12px; overflow-x: auto; padding: 2px 2px 6px;
+  scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
+  /* Fades the right edge when horizontal scroll is possible -- a visible cue
+     that more ventures exist, instead of relying on chance discovery. */
+  mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+}
 .venture-chip {
   flex: 0 0 auto; min-width: 172px; background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 15px 16px; cursor: pointer; text-align: left; box-shadow: var(--shadow-sm);
+  scroll-snap-align: start;
 }
+@media (max-width: 480px) { .venture-chip { min-width: 82vw; } }
 .venture-chip:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
 .venture-chip.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
 .venture-chip .vc-name { font-weight: 650; font-size: 14.5px; color: var(--text); letter-spacing: -0.01em; }
@@ -313,14 +402,43 @@ footer { margin-top: 50px; font-size: 11.5px; color: var(--text-faint); text-ali
 .perf-metric-empty { font-size: 12px; color: var(--text-faint); font-style: italic; }
 
 /* ---------- payouts / ledger ---------- */
-.ledger-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.ledger-table th { text-align: left; font-size: 11px; font-weight: 650; color: var(--text-faint); padding: 0 10px 10px 0; border-bottom: 1px solid var(--border); }
-.ledger-table td { padding: 10px 10px 10px 0; border-bottom: 1px solid var(--border); color: var(--text-dim); }
+.ledger-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.ledger-table th { text-align: left; font-size: var(--text-2xs); font-weight: 650; color: var(--text-faint); padding: 0 10px 12px 0; border-bottom: 1px solid var(--border); }
+.ledger-table td { padding: 12px 10px 12px 0; border-bottom: 1px solid var(--border); color: var(--text-dim); }
 .ledger-table td:first-child, .ledger-table th:first-child { padding-left: 0; }
 .ledger-table td.num, .ledger-table th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text); }
+.ledger-table tbody tr:hover td { background: var(--surface-2); }
+.ledger-table tbody tr:nth-child(even) td { background: var(--surface-2); }
+.ledger-table tbody tr:nth-child(even):hover td { background: var(--surface-3); }
 .ledger-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 16px; box-shadow: var(--shadow-sm); }
 .form-inline { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
 .form-inline .field, .form-inline select { flex: 1; min-width: 110px; }
+
+/* Below 640px, ledger tables restack as label/value cards instead of forcing
+   horizontal scroll on a dense multi-column table. Cells carry data-label. */
+@media (max-width: 640px) {
+  .ledger-table thead { display: none; }
+  .ledger-table, .ledger-table tbody, .ledger-table tr { display: block; width: 100%; }
+  .ledger-table tr { border-bottom: 1px solid var(--border); padding: 10px 0; }
+  .ledger-table tr:nth-child(even) td { background: transparent; }
+  .ledger-table td {
+    display: flex; justify-content: space-between; gap: 10px; align-items: center;
+    border-bottom: none; padding: 4px 0;
+  }
+  .ledger-table td[colspan] { display: block; }
+  .ledger-table td::before {
+    content: attr(data-label); font-size: var(--text-2xs); font-weight: 650; color: var(--text-faint); flex-shrink: 0;
+  }
+  .ledger-table td.num { font-size: var(--text-md); }
+
+  .form-inline { flex-direction: column; align-items: stretch; }
+  .form-inline .field, .form-inline select, .form-inline button { width: 100%; min-width: 0; }
+}
+
+@media (max-width: 480px) {
+  .wrap { padding: 16px 14px 90px; }
+  .console-input { min-width: 0; flex-basis: 100%; }
+}
 
 /* ---------- werkwijze card ---------- */
 .workflow-card {
