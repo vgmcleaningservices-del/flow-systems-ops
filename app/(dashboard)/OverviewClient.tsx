@@ -327,33 +327,76 @@ function MatthiasOverview(props: {
   );
 }
 
+// Zelfde 72u-aftel-formattering als MatthiasOverview's sprint-klok, hier apart
+// getrokken omdat de team-variant per venture een eigen klokje toont i.p.v. één
+// tegel voor de eerstvolgende deadline.
+function sprintClockInfo(deadline: string | null, now: number) {
+  if (!deadline) return { text: "--:--:--", foot: "geen actieve sprint", urgent: false };
+  const remaining = new Date(deadline).getTime() - now;
+  if (remaining <= 0) return { text: "00:00:00", foot: "sprint venster verlopen", urgent: true };
+  const h = Math.floor(remaining / 3600000), m = Math.floor((remaining % 3600000) / 60000), s = Math.floor((remaining % 60000) / 1000);
+  return { text: `${pad(h)}:${pad(m)}:${pad(s)}`, foot: "resterend", urgent: h < 24 };
+}
+
 function TeamOverview(props: { me: string; initialTasks: Task[]; initialCrew: Crew[]; initialWikiPages: WikiPage[]; initialVentures: Venture[] }) {
   const [tasks, setTasks] = useState(props.initialTasks);
   const [crew, setCrew] = useState(props.initialCrew);
   const [wikiPages, setWikiPages] = useState(props.initialWikiPages);
-  const [ventures] = useState(props.initialVentures);
+  const [ventures, setVentures] = useState(props.initialVentures);
+  const [now, setNow] = useState(Date.now());
   const me = props.me;
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     const refetchTasks = () => supabaseBrowser.from("tasks").select("*").eq("assigned_to", me).order("created_at", { ascending: false }).then(({ data }) => data && setTasks(data as Task[]));
     const refetchCrew = () => supabaseBrowser.from("crew").select("*").order("rank").then(({ data }) => data && setCrew(data as Crew[]));
     const refetchWiki = () => supabaseBrowser.from("wiki_pages").select("*").order("updated_at", { ascending: false }).limit(3).then(({ data }) => data && setWikiPages(data as WikiPage[]));
+    const refetchVentures = () => supabaseBrowser.from("ventures").select("*").then(({ data }) => data && setVentures(data as Venture[]));
     const channel = supabaseBrowser
       .channel("flowsys-overview-team")
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, refetchTasks)
       .on("postgres_changes", { event: "*", schema: "public", table: "crew" }, refetchCrew)
       .on("postgres_changes", { event: "*", schema: "public", table: "wiki_pages" }, refetchWiki)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ventures" }, refetchVentures)
       .subscribe();
     return () => { supabaseBrowser.removeChannel(channel); };
   }, [me]);
 
   const ventureName = (id: string | null) => (id ? ventures.find((v) => v.id === id)?.name ?? id : null);
   const owner = crew.find((c) => c.status === "bottleneck");
+  const sprintVentures = ventures.filter((v) => v.stage === "sprint");
+
+  async function resetSprint(v: Venture) {
+    await post("/api/venture", { id: v.id, resetSprintHours: 72, sprintLabel: v.sprint_label || v.name });
+  }
 
   return (
     <>
       <div className="section-head"><span className="section-title">Voor jou</span></div>
       <ForYouList tasks={tasks} me={me} ventureName={ventureName} />
+
+      <div className="section-head"><span className="section-title">Programma-timers</span></div>
+      <p className="section-sub">72u sprint-klok per actieve venture</p>
+      {sprintVentures.length === 0 ? (
+        <div className="col-empty">Geen venture momenteel in actieve sprint.</div>
+      ) : (
+        <motion.div className="telemetry" variants={staggerContainerVariants} initial="hidden" animate="show">
+          {sprintVentures.map((v) => {
+            const clock = sprintClockInfo(v.sprint_deadline, now);
+            return (
+              <TiltCard key={v.id} className={"tile" + (clock.urgent ? " tile-urgent striped-accent" : "")} variants={staggerItemVariants}>
+                <div className="tile-label"><span>{v.name}</span></div>
+                <div className={"tile-value" + (clock.urgent ? " critical-color" : "")}>{clock.text}</div>
+                <div className="tile-foot">{clock.foot}<button className="btn ghost" style={{ marginLeft: "auto" }} onClick={() => resetSprint(v)}>Start nieuwe 72u sprint</button></div>
+              </TiltCard>
+            );
+          })}
+        </motion.div>
+      )}
 
       <div className="section-head"><span className="section-title">Squad Status</span></div>
       {owner ? (
