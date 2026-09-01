@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutGroup } from "motion/react";
@@ -32,7 +32,7 @@ const ADMIN_NAV_ITEMS = [
 // Totaal aantal ongelezen chatberichten voor deze persoon, over alle
 // kanalen heen (War Room + elke 1-op-1) -- puur voor het badge-cijfer naast
 // "Chat" in de nav, losstaand van wat de Chat-pagina zelf al bijhoudt.
-function useTotalUnread(me: string): number {
+function useTotalUnread(me: string, instanceId: string): number {
   const [count, setCount] = useState(0);
   useEffect(() => {
     if (!me) return;
@@ -48,12 +48,12 @@ function useTotalUnread(me: string): number {
     }
     refresh();
     const channel = supabaseBrowser
-      .channel("flowsys-nav-unread")
+      .channel(`flowsys-nav-unread-${instanceId.replace(/[^a-zA-Z0-9]/g, "")}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "chat_messages" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "chat_reads" }, refresh)
       .subscribe();
     return () => { supabaseBrowser.removeChannel(channel); };
-  }, [me]);
+  }, [me, instanceId]);
   return count;
 }
 
@@ -61,7 +61,8 @@ export function NavLinks({ isMatthias, me, onNavigate, scope, variant = "vertica
   isMatthias: boolean; me: string; onNavigate?: () => void; scope: string; variant?: "vertical" | "horizontal";
 }) {
   const pathname = usePathname();
-  const unread = useTotalUnread(me);
+  const instanceId = useId();
+  const unread = useTotalUnread(me, instanceId);
   const link = (href: string, label: string) => {
     const active = pathname === href;
     return (
