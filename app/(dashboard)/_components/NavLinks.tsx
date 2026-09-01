@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useId, useState } from "react";
+import { Fragment, useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutGroup } from "motion/react";
@@ -8,15 +8,24 @@ import { supabaseBrowser } from "@/lib/supabaseClient";
 import { ALL_PEOPLE } from "@/lib/people";
 import { WARROOM_CHANNEL, dmChannel } from "@/lib/chat";
 
-const NAV_ITEMS = [
-  { href: "/", label: "Overzicht" },
-  { href: "/squad", label: "Squad Status" },
-  { href: "/pipeline", label: "App Pipeline" },
-  { href: "/programmas", label: "Programma's" },
-  { href: "/taken", label: "Taken" },
-  { href: "/wiki", label: "Wiki" },
-  { href: "/chat", label: "Chat" },
-  { href: "/herinneringen", label: "Herinneringen" },
+// Gegroepeerd i.p.v. één platte lijst -- bij 13 items (9 voor niet-Matthias)
+// oogt een ongelabelde stapel al snel als ruis. Labels alleen zichtbaar in de
+// verticale sidebar (zie render hieronder); de horizontale topbar-variant
+// blijft een platte rij, zoals die al was.
+const NAV_GROUPS: { label: string | null; items: { href: string; label: string }[] }[] = [
+  { label: null, items: [{ href: "/", label: "Overzicht" }] },
+  { label: "Werk", items: [
+    { href: "/squad", label: "Squad Status" },
+    { href: "/pipeline", label: "App Pipeline" },
+    { href: "/programmas", label: "Programma's" },
+    { href: "/taken", label: "Taken" },
+    { href: "/wiki", label: "Wiki" },
+  ] },
+  { label: "Team", items: [
+    { href: "/chat", label: "Chat" },
+    { href: "/feed", label: "Feed" },
+    { href: "/herinneringen", label: "Herinneringen" },
+  ] },
 ];
 const ADMIN_NAV_ITEMS = [
   { href: "/prestaties", label: "Prestaties" },
@@ -83,7 +92,14 @@ export function NavLinks({ isMatthias, me, onNavigate, scope, variant = "vertica
   return (
     <LayoutGroup id={scope}>
       <nav className={variant === "horizontal" ? "topbar-nav" : "sidebar-nav"}>
-        {NAV_ITEMS.map((i) => link(i.href, i.label))}
+        {variant === "horizontal"
+          ? NAV_GROUPS.flatMap((g) => g.items).map((i) => link(i.href, i.label))
+          : NAV_GROUPS.map((g, i) => (
+              <Fragment key={g.label ?? `g${i}`}>
+                {g.label && <div className="sidebar-section-label">{g.label}</div>}
+                {g.items.map((it) => link(it.href, it.label))}
+              </Fragment>
+            ))}
         {isMatthias && (
           variant === "horizontal" ? (
             <>

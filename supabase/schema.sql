@@ -197,6 +197,14 @@ create table if not exists chat_reads (
   primary key (person, channel)
 );
 
+-- Like-knop op War Room-posts in de Instagram-stijl Feed.
+create table if not exists chat_message_likes (
+  message_id bigint not null references chat_messages(id) on delete cascade,
+  person text not null,
+  liked_at timestamptz not null default now(),
+  primary key (message_id, person)
+);
+
 -- Publieke Storage-bucket voor chat-bijlagen (foto/video). Uploads lopen via
 -- de server met de service-role key, dus geen aparte schrijfpolicy nodig.
 insert into storage.buckets (id, name, public) values ('chat-uploads', 'chat-uploads', true) on conflict (id) do nothing;
@@ -236,6 +244,7 @@ alter table wiki_pages enable row level security;
 alter table commit_summaries enable row level security;
 alter table chat_messages enable row level security;
 alter table chat_reads enable row level security;
+alter table chat_message_likes enable row level security;
 
 create policy "public read crew" on crew for select using (true);
 create policy "public read ventures" on ventures for select using (true);
@@ -250,6 +259,7 @@ create policy "public read wiki_pages" on wiki_pages for select using (true);
 create policy "public read commit_summaries" on commit_summaries for select using (true);
 create policy "public read chat_messages" on chat_messages for select using (true);
 create policy "public read chat_reads" on chat_reads for select using (true);
+create policy "public read chat_message_likes" on chat_message_likes for select using (true);
 
 -- Realtime: let the dashboard subscribe to live changes instead of polling.
 alter publication supabase_realtime add table crew;
@@ -264,3 +274,4 @@ alter publication supabase_realtime add table tasks;
 alter publication supabase_realtime add table commit_summaries;
 alter publication supabase_realtime add table chat_messages;
 alter publication supabase_realtime add table chat_reads;
+alter publication supabase_realtime add table chat_message_likes;
