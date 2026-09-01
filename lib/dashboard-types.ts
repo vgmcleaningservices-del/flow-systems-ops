@@ -13,6 +13,7 @@ export interface Venture {
   github_repo: string | null; pitched_by: string | null; royalty_pct: number;
   mrr: number; mrr_prev: number; sprint_deadline: string | null; sprint_label: string;
   mrr_source_url: string | null; mrr_synced_at: string | null; notion_url: string | null;
+  long_description: string;
 }
 export interface CommitRow { id: number; repo: string; venture_id: string | null; crew_id: string | null; sha: string; message: string; author: string; pass_to: string | null; ts: string; }
 export interface Directive { id: number; venture_id: string | null; author: string; type: "directive" | "veto"; text: string; ts: string; }

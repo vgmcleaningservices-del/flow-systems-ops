@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Overzicht" },
   { href: "/squad", label: "Squad Status" },
   { href: "/pipeline", label: "App Pipeline" },
+  { href: "/programmas", label: "Programma's" },
   { href: "/taken", label: "Taken" },
   { href: "/wiki", label: "Wiki" },
 ];

@@ -36,6 +36,7 @@ create table if not exists ventures (
   notion_url text,                    -- optional link to this venture's Notion doc/notes page
   sprint_deadline timestamptz,
   sprint_label text not null default '',
+  long_description text not null default '', -- volledig probleem/oplossing/mechanisme-verhaal voor de Programma's-pagina (feature hierboven is bewust kort, voor de pipeline-kaart)
   updated_at timestamptz not null default now()
 );
 
