@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import * as motion from "motion/react-client";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import type { ChatMessage } from "@/lib/dashboard-types";
-import { WARROOM_CHANNEL, dmChannel } from "@/lib/chat";
+import { WARROOM_CHANNEL } from "@/lib/chat";
 import { staggerContainerVariants, staggerItemVariants } from "../_components/motion";
 
 function dateLabel(iso: string): string {
@@ -21,14 +21,12 @@ export function HerinneringenClient(props: { me: string; others: { id: string; n
   const { me, others } = props;
   const [media, setMedia] = useState(props.initialMedia);
 
-  const myChannels = useMemo(() => [WARROOM_CHANNEL, ...others.map((p) => dmChannel(me, p.id))], [me, others]);
-
   useEffect(() => {
     const refetch = () =>
       supabaseBrowser
         .from("chat_messages")
         .select("*")
-        .in("channel", myChannels)
+        .eq("sender", me)
         .in("media_type", ["image", "video"])
         .order("created_at", { ascending: false })
         .limit(500)
@@ -38,7 +36,7 @@ export function HerinneringenClient(props: { me: string; others: { id: string; n
       .on("postgres_changes", { event: "*", schema: "public", table: "chat_messages" }, refetch)
       .subscribe();
     return () => { supabaseBrowser.removeChannel(channel); };
-  }, [myChannels]);
+  }, [me]);
 
   function channelLabel(ch: string) {
     if (ch === WARROOM_CHANNEL) return "War Room";
@@ -59,9 +57,9 @@ export function HerinneringenClient(props: { me: string; others: { id: string; n
   return (
     <>
       <div className="section-head"><span className="section-title">Herinneringen</span></div>
-      <p className="section-sub">Al jouw foto's en video's uit War Room en je privégesprekken, permanent bewaard — je eigen archief, van niemand anders zichtbaar</p>
+      <p className="section-sub">Alle foto's en video's die je zelf verstuurd hebt, permanent bewaard — je eigen archief, van niemand anders zichtbaar</p>
 
-      {groups.length === 0 && <div className="col-empty">Nog geen foto's of video's gedeeld.</div>}
+      {groups.length === 0 && <div className="col-empty">Nog geen foto's of video's verstuurd.</div>}
 
       {groups.map(([label, items]) => (
         <div key={label}>
