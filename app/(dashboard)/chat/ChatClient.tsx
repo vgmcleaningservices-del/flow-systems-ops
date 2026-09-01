@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { post } from "@/lib/api-client";
-import type { ChatMessage, ChatMessageView, ChatRead, Crew, TaskPriority, Venture } from "@/lib/dashboard-types";
+import type { ChatMessage, ChatRead, Crew, TaskPriority, Venture } from "@/lib/dashboard-types";
 import { PEOPLE_NAME } from "@/lib/dashboard-constants";
 import { relTime } from "@/lib/dashboard-format";
 import { WARROOM_CHANNEL, dmChannel } from "@/lib/chat";
@@ -12,13 +12,12 @@ const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const AUDIO_MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
 
 export function ChatClient(props: {
-  me: string; others: { id: string; name: string }[]; initialMessages: ChatMessage[]; initialReads: ChatRead[]; initialViews: ChatMessageView[];
+  me: string; others: { id: string; name: string }[]; initialMessages: ChatMessage[]; initialReads: ChatRead[];
   crew: Crew[]; ventures: Venture[];
 }) {
   const { me, others, crew, ventures } = props;
   const [messages, setMessages] = useState(props.initialMessages);
   const [reads, setReads] = useState(props.initialReads);
-  const [viewedIds, setViewedIds] = useState<Set<number>>(new Set(props.initialViews.map((v) => v.message_id)));
   const [activeChannel, setActiveChannel] = useState(WARROOM_CHANNEL);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -31,7 +30,8 @@ export function ChatClient(props: {
   const audioChunksRef = useRef<Blob[]>([]);
 
   const myChannels = useMemo(() => [WARROOM_CHANNEL, ...others.map((p) => dmChannel(me, p.id))], [me, others]);
-  const readMap = useMemo(() => Object.fromEntries(reads.map((r) => [r.channel, r.last_read_at])), [reads]);
+  const myReads = useMemo(() => reads.filter((r) => r.person === me), [reads, me]);
+  const readMap = useMemo(() => Object.fromEntries(myReads.map((r) => [r.channel, r.last_read_at])), [myReads]);
 
   // Diepe link vanuit een meldingsklik (?channel=...) -- window.location.search
   // i.p.v. useSearchParams(), zelfde reden als de loginpagina: dat dwingt een
@@ -51,9 +51,16 @@ export function ChatClient(props: {
         .order("created_at", { ascending: true })
         .limit(500)
         .then(({ data }) => data && setMessages(data as ChatMessage[]));
+    const refetchReads = () =>
+      supabaseBrowser
+        .from("chat_reads")
+        .select("*")
+        .in("channel", myChannels)
+        .then(({ data }) => data && setReads(data as ChatRead[]));
     const channel = supabaseBrowser
       .channel("flowsys-chat")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, refetchMessages)
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_reads" }, refetchReads)
       .subscribe();
     return () => { supabaseBrowser.removeChannel(channel); };
   }, [myChannels]);
@@ -71,7 +78,7 @@ export function ChatClient(props: {
     if (visible.length === 0) return;
     const now = new Date().toISOString();
     setReads((prev) => {
-      const next = prev.filter((r) => r.channel !== activeChannel);
+      const next = prev.filter((r) => !(r.channel === activeChannel && r.person === me));
       return [...next, { person: me, channel: activeChannel, last_read_at: now }];
     });
     post("/api/chat/read", { channel: activeChannel });
@@ -80,6 +87,25 @@ export function ChatClient(props: {
   function unreadCount(ch: string) {
     const lastRead = readMap[ch];
     return messages.filter((m) => m.channel === ch && m.sender !== me && (!lastRead || m.created_at > lastRead)).length;
+  }
+
+  // Leesbevestiging op mijn eigen verzonden berichten: in een DM simpelweg
+  // "Gezien" zodra de ander het kanaal na dit bericht heeft gelezen; in War
+  // Room (meerdere ontvangers) een naamlijst, of "Gezien door iedereen" als
+  // alle teamleden buiten mezelf het kanaal al zo ver gelezen hebben.
+  function seenLabel(m: ChatMessage): string | null {
+    if (m.sender !== me) return null;
+    const recipients = m.channel === WARROOM_CHANNEL
+      ? others
+      : others.filter((p) => dmChannel(me, p.id) === m.channel);
+    if (recipients.length === 0) return null;
+    const seenIds = new Set(
+      reads.filter((r) => r.channel === m.channel && r.person !== me && r.last_read_at >= m.created_at).map((r) => r.person)
+    );
+    const seenRecipients = recipients.filter((p) => seenIds.has(p.id));
+    if (seenRecipients.length === 0) return null;
+    if (seenRecipients.length === recipients.length) return recipients.length === 1 ? "Gezien" : "Gezien door iedereen";
+    return "Gezien door " + seenRecipients.map((p) => p.name).join(", ");
   }
 
   async function send() {
@@ -142,12 +168,6 @@ export function ChatClient(props: {
     }
   }
 
-  async function markViewed(id: number, mediaUrl: string) {
-    setViewedIds((prev) => new Set(prev).add(id));
-    window.open(mediaUrl, "_blank");
-    await post("/api/chat/view", { message_id: id });
-  }
-
   async function createTask(body: { venture_id: string; title: string; description: string; assigned_to: string; priority: TaskPriority }) {
     const ok = await post("/api/tasks", body);
     if (ok) setShowTaskForm(false);
@@ -191,30 +211,22 @@ export function ChatClient(props: {
             {visible.length === 0 && <div className="col-empty">Nog geen berichten — stuur het eerste.</div>}
             {visible.map((m) => {
               const isMine = m.sender === me;
-              const isEphemeralUnseen = (m.media_type === "image" || m.media_type === "video") && !isMine && !viewedIds.has(m.id);
+              const seen = seenLabel(m);
               return (
                 <div className={"chat-bubble" + (isMine ? " mine" : "")} key={m.id}>
                   {!isMine && <div className="chat-bubble-sender">{PEOPLE_NAME[m.sender] ?? m.sender}</div>}
-                  {isEphemeralUnseen && m.media_url && (
-                    <div className="chat-bubble-unseen" onClick={() => markViewed(m.id, m.media_url!)}>
-                      👁 Tik om te bekijken — {m.media_type === "image" ? "foto" : "video"} (eenmalig)
-                    </div>
+                  {m.media_type === "image" && m.media_url && (
+                    <img className="chat-bubble-media" src={m.media_url} alt="" onClick={() => window.open(m.media_url!, "_blank")} />
                   )}
-                  {!isEphemeralUnseen && m.media_type === "image" && m.media_url && (
-                    <>
-                      {!isMine && <div className="chat-bubble-seen-label">Bekeken</div>}
-                      <img className="chat-bubble-media" src={m.media_url} alt="" onClick={() => window.open(m.media_url!, "_blank")} />
-                    </>
-                  )}
-                  {!isEphemeralUnseen && m.media_type === "video" && m.media_url && (
-                    <>
-                      {!isMine && <div className="chat-bubble-seen-label">Bekeken</div>}
-                      <video className="chat-bubble-media" src={m.media_url} controls onClick={() => window.open(m.media_url!, "_blank")} />
-                    </>
+                  {m.media_type === "video" && m.media_url && (
+                    <video className="chat-bubble-media" src={m.media_url} controls onClick={() => window.open(m.media_url!, "_blank")} />
                   )}
                   {m.media_type === "audio" && m.media_url && <audio className="chat-bubble-media" src={m.media_url} controls />}
                   {m.content && <div className="chat-bubble-content">{m.content}</div>}
-                  <div className="chat-bubble-time">{relTime(m.created_at)}</div>
+                  <div className="chat-bubble-time">
+                    {relTime(m.created_at)}
+                    {seen && <span className="chat-bubble-seen"> · {seen}</span>}
+                  </div>
                 </div>
               );
             })}

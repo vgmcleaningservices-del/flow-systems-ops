@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: "/taken", label: "Taken" },
   { href: "/wiki", label: "Wiki" },
   { href: "/chat", label: "Chat" },
+  { href: "/herinneringen", label: "Herinneringen" },
 ];
 const ADMIN_NAV_ITEMS = [
   { href: "/prestaties", label: "Prestaties" },

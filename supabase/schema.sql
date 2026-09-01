@@ -197,17 +197,6 @@ create table if not exists chat_reads (
   primary key (person, channel)
 );
 
--- "Snapchat-concept" voor foto/video-berichten -- eenmaal bekeken door een
--- ontvanger verdwijnt de inhoud voor DIE ontvanger (verzender en, in War
--- Room, andere leden blijven 'm gewoon zien -- vandaar per-viewer tracking).
--- Geldt niet voor voice-berichten, die blijven altijd herbeluisterbaar.
-create table if not exists chat_message_views (
-  message_id bigint not null references chat_messages(id) on delete cascade,
-  viewer text not null,
-  viewed_at timestamptz not null default now(),
-  primary key (message_id, viewer)
-);
-
 -- Publieke Storage-bucket voor chat-bijlagen (foto/video). Uploads lopen via
 -- de server met de service-role key, dus geen aparte schrijfpolicy nodig.
 insert into storage.buckets (id, name, public) values ('chat-uploads', 'chat-uploads', true) on conflict (id) do nothing;
@@ -247,7 +236,6 @@ alter table wiki_pages enable row level security;
 alter table commit_summaries enable row level security;
 alter table chat_messages enable row level security;
 alter table chat_reads enable row level security;
-alter table chat_message_views enable row level security;
 
 create policy "public read crew" on crew for select using (true);
 create policy "public read ventures" on ventures for select using (true);
@@ -262,7 +250,6 @@ create policy "public read wiki_pages" on wiki_pages for select using (true);
 create policy "public read commit_summaries" on commit_summaries for select using (true);
 create policy "public read chat_messages" on chat_messages for select using (true);
 create policy "public read chat_reads" on chat_reads for select using (true);
-create policy "public read chat_message_views" on chat_message_views for select using (true);
 
 -- Realtime: let the dashboard subscribe to live changes instead of polling.
 alter publication supabase_realtime add table crew;
@@ -277,4 +264,3 @@ alter publication supabase_realtime add table tasks;
 alter publication supabase_realtime add table commit_summaries;
 alter publication supabase_realtime add table chat_messages;
 alter publication supabase_realtime add table chat_reads;
-alter publication supabase_realtime add table chat_message_views;

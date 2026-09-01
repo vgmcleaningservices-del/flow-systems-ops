@@ -12,10 +12,11 @@ export default async function ChatPage() {
   const myChannels = [WARROOM_CHANNEL, ...others.map((p) => dmChannel(me, p.id))];
 
   const db = supabaseAdmin();
-  const [{ data: messages }, { data: reads }, { data: views }, { data: crew }, { data: ventures }] = await Promise.all([
+  const [{ data: messages }, { data: reads }, { data: crew }, { data: ventures }] = await Promise.all([
     db.from("chat_messages").select("*").in("channel", myChannels).order("created_at", { ascending: true }).limit(500),
-    db.from("chat_reads").select("*").eq("person", me),
-    db.from("chat_message_views").select("*").eq("viewer", me),
+    // Alle leesregels van iedereen in mijn kanalen (niet alleen die van mezelf)
+    // -- nodig om leesbevestigingen op mijn eigen verzonden berichten te tonen.
+    db.from("chat_reads").select("*").in("channel", myChannels),
     db.from("crew").select("*").order("rank", { ascending: true }),
     db.from("ventures").select("*"),
   ]);
@@ -23,7 +24,7 @@ export default async function ChatPage() {
   return (
     <ChatClient
       me={me} others={others}
-      initialMessages={messages ?? []} initialReads={reads ?? []} initialViews={views ?? []}
+      initialMessages={messages ?? []} initialReads={reads ?? []}
       crew={crew ?? []} ventures={ventures ?? []}
     />
   );
