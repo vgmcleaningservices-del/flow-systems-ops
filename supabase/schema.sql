@@ -174,6 +174,16 @@ create table if not exists mrr_snapshots (
   captured_at timestamptz not null default now()
 );
 
+-- Interne teamchat -- War Room (channel = 'warroom') en 1-op-1 chats (channel
+-- = de twee persoon-id's, alfabetisch gesorteerd, gescheiden door '__').
+create table if not exists chat_messages (
+  id bigint generated always as identity primary key,
+  channel text not null,
+  sender text not null,
+  content text not null,
+  created_at timestamptz not null default now()
+);
+
 -- seed data — edit freely afterwards from the dashboard or the Supabase table editor.
 -- Order matters: crew and ventures reference each other (pitched_by / current_venture_id),
 -- so insert both without their cross-reference first, then backfill with UPDATEs —
@@ -207,6 +217,7 @@ alter table tasks enable row level security;
 alter table tools enable row level security;
 alter table wiki_pages enable row level security;
 alter table commit_summaries enable row level security;
+alter table chat_messages enable row level security;
 
 create policy "public read crew" on crew for select using (true);
 create policy "public read ventures" on ventures for select using (true);
@@ -219,6 +230,7 @@ create policy "public read tasks" on tasks for select using (true);
 create policy "public read tools" on tools for select using (true);
 create policy "public read wiki_pages" on wiki_pages for select using (true);
 create policy "public read commit_summaries" on commit_summaries for select using (true);
+create policy "public read chat_messages" on chat_messages for select using (true);
 
 -- Realtime: let the dashboard subscribe to live changes instead of polling.
 alter publication supabase_realtime add table crew;
@@ -231,3 +243,4 @@ alter publication supabase_realtime add table tools;
 alter publication supabase_realtime add table wiki_pages;
 alter publication supabase_realtime add table tasks;
 alter publication supabase_realtime add table commit_summaries;
+alter publication supabase_realtime add table chat_messages;
