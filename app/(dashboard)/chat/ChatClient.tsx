@@ -2,31 +2,45 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import { post } from "@/lib/api-client";
-import type { ChatMessage, ChatRead, Crew, TaskPriority, Venture } from "@/lib/dashboard-types";
+import type { ChatMessage, ChatMessageView, ChatRead, Crew, TaskPriority, Venture } from "@/lib/dashboard-types";
 import { PEOPLE_NAME } from "@/lib/dashboard-constants";
 import { relTime } from "@/lib/dashboard-format";
 import { WARROOM_CHANNEL, dmChannel } from "@/lib/chat";
 import { TaskCreateForm } from "../taken/TaskCreateForm";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const AUDIO_MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
 
 export function ChatClient(props: {
-  me: string; others: { id: string; name: string }[]; initialMessages: ChatMessage[]; initialReads: ChatRead[];
+  me: string; others: { id: string; name: string }[]; initialMessages: ChatMessage[]; initialReads: ChatRead[]; initialViews: ChatMessageView[];
   crew: Crew[]; ventures: Venture[];
 }) {
   const { me, others, crew, ventures } = props;
   const [messages, setMessages] = useState(props.initialMessages);
   const [reads, setReads] = useState(props.initialReads);
+  const [viewedIds, setViewedIds] = useState<Set<number>>(new Set(props.initialViews.map((v) => v.message_id)));
   const [activeChannel, setActiveChannel] = useState(WARROOM_CHANNEL);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [recording, setRecording] = useState(false);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const myChannels = useMemo(() => [WARROOM_CHANNEL, ...others.map((p) => dmChannel(me, p.id))], [me, others]);
   const readMap = useMemo(() => Object.fromEntries(reads.map((r) => [r.channel, r.last_read_at])), [reads]);
+
+  // Diepe link vanuit een meldingsklik (?channel=...) -- window.location.search
+  // i.p.v. useSearchParams(), zelfde reden als de loginpagina: dat dwingt een
+  // Suspense-boundary af die we hier niet willen optuigen voor één query-param.
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("channel");
+    if (requested && myChannels.includes(requested)) setActiveChannel(requested);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const refetchMessages = () =>
@@ -77,18 +91,7 @@ export function ChatClient(props: {
     setSending(false);
   }
 
-  async function handleFile(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
-      window.alert("Alleen foto's en video's kunnen geüpload worden.");
-      return;
-    }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      window.alert("Bestand is te groot (max 25MB).");
-      return;
-    }
+  async function uploadFile(file: File) {
     setUploading(true);
     const form = new FormData();
     form.append("channel", activeChannel);
@@ -96,6 +99,53 @@ export function ChatClient(props: {
     const res = await fetch("/api/chat/upload", { method: "POST", body: form });
     if (!res.ok) window.alert("Upload mislukt — probeer opnieuw.");
     setUploading(false);
+  }
+
+  async function handleFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+      window.alert("Alleen foto's en video's kunnen op deze manier geüpload worden.");
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      window.alert("Bestand is te groot (max 25MB).");
+      return;
+    }
+    await uploadFile(file);
+  }
+
+  async function toggleRecording() {
+    if (recording) {
+      mediaRecorderRef.current?.stop();
+      setRecording(false);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = AUDIO_MIME_CANDIDATES.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: mimeType || "audio/webm" });
+        const ext = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
+        await uploadFile(new File([blob], `voice-${Date.now()}.${ext}`, { type: blob.type }));
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch {
+      window.alert("Kon geen toegang krijgen tot de microfoon.");
+    }
+  }
+
+  async function markViewed(id: number, mediaUrl: string) {
+    setViewedIds((prev) => new Set(prev).add(id));
+    window.open(mediaUrl, "_blank");
+    await post("/api/chat/view", { message_id: id });
   }
 
   async function createTask(body: { venture_id: string; title: string; description: string; assigned_to: string; priority: TaskPriority }) {
@@ -139,19 +189,42 @@ export function ChatClient(props: {
           )}
           <div className="chat-messages" ref={listRef}>
             {visible.length === 0 && <div className="col-empty">Nog geen berichten — stuur het eerste.</div>}
-            {visible.map((m) => (
-              <div className={"chat-bubble" + (m.sender === me ? " mine" : "")} key={m.id}>
-                {m.sender !== me && <div className="chat-bubble-sender">{PEOPLE_NAME[m.sender] ?? m.sender}</div>}
-                {m.media_type === "image" && m.media_url && <img className="chat-bubble-media" src={m.media_url} alt="" />}
-                {m.media_type === "video" && m.media_url && <video className="chat-bubble-media" src={m.media_url} controls />}
-                {m.content && <div className="chat-bubble-content">{m.content}</div>}
-                <div className="chat-bubble-time">{relTime(m.created_at)}</div>
-              </div>
-            ))}
+            {visible.map((m) => {
+              const isMine = m.sender === me;
+              const isEphemeralUnseen = (m.media_type === "image" || m.media_type === "video") && !isMine && !viewedIds.has(m.id);
+              return (
+                <div className={"chat-bubble" + (isMine ? " mine" : "")} key={m.id}>
+                  {!isMine && <div className="chat-bubble-sender">{PEOPLE_NAME[m.sender] ?? m.sender}</div>}
+                  {isEphemeralUnseen && m.media_url && (
+                    <div className="chat-bubble-unseen" onClick={() => markViewed(m.id, m.media_url!)}>
+                      👁 Tik om te bekijken — {m.media_type === "image" ? "foto" : "video"} (eenmalig)
+                    </div>
+                  )}
+                  {!isEphemeralUnseen && m.media_type === "image" && m.media_url && (
+                    <>
+                      {!isMine && <div className="chat-bubble-seen-label">Bekeken</div>}
+                      <img className="chat-bubble-media" src={m.media_url} alt="" onClick={() => window.open(m.media_url!, "_blank")} />
+                    </>
+                  )}
+                  {!isEphemeralUnseen && m.media_type === "video" && m.media_url && (
+                    <>
+                      {!isMine && <div className="chat-bubble-seen-label">Bekeken</div>}
+                      <video className="chat-bubble-media" src={m.media_url} controls onClick={() => window.open(m.media_url!, "_blank")} />
+                    </>
+                  )}
+                  {m.media_type === "audio" && m.media_url && <audio className="chat-bubble-media" src={m.media_url} controls />}
+                  {m.content && <div className="chat-bubble-content">{m.content}</div>}
+                  <div className="chat-bubble-time">{relTime(m.created_at)}</div>
+                </div>
+              );
+            })}
           </div>
           <div className="chat-composer">
             <input ref={fileInputRef} type="file" accept="image/*,video/*" style={{ display: "none" }} onChange={handleFile} />
-            <button className="icon-btn" onClick={() => fileInputRef.current?.click()} disabled={uploading} aria-label="Foto of video toevoegen">{uploading ? "…" : "📎"}</button>
+            <button className="icon-btn" onClick={() => fileInputRef.current?.click()} disabled={uploading || recording} aria-label="Foto of video toevoegen">{uploading ? "…" : "📎"}</button>
+            <button className={"icon-btn" + (recording ? " recording" : "")} onClick={toggleRecording} disabled={uploading} aria-label={recording ? "Stop opname" : "Voice-bericht opnemen"}>
+              {recording ? "⏹" : "🎤"}
+            </button>
             <input
               className="field"
               placeholder={`Bericht naar ${activeLabel}...`}

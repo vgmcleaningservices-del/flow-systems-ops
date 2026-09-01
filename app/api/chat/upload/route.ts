@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseServer";
 import { getIdentity } from "@/lib/session";
 
-const MAX_BYTES = 25 * 1024 * 1024; // 25MB -- ruim genoeg voor een foto/korte video, klein genoeg om de gratis Storage-tier niet meteen te vullen
+const MAX_BYTES = 25 * 1024 * 1024; // 25MB -- ruim genoeg voor een foto/korte video/voice-bericht, klein genoeg om de gratis Storage-tier niet meteen te vullen
 
 export async function POST(req: NextRequest) {
   const identity = await getIdentity(req);
@@ -17,7 +17,8 @@ export async function POST(req: NextRequest) {
 
   const isImage = file.type.startsWith("image/");
   const isVideo = file.type.startsWith("video/");
-  if (!isImage && !isVideo) return NextResponse.json({ error: "unsupported_type" }, { status: 400 });
+  const isAudio = file.type.startsWith("audio/");
+  if (!isImage && !isVideo && !isAudio) return NextResponse.json({ error: "unsupported_type" }, { status: 400 });
   if (file.size > MAX_BYTES) return NextResponse.json({ error: "file_too_large" }, { status: 400 });
 
   const db = supabaseAdmin();
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
     sender: identity,
     content: "",
     media_url: publicUrl.publicUrl,
-    media_type: isImage ? "image" : "video",
+    media_type: isImage ? "image" : isVideo ? "video" : "audio",
   });
   if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
   return NextResponse.json({ ok: true });

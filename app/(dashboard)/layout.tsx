@@ -5,7 +5,7 @@ import { NavLinks } from "./_components/NavLinks";
 import { LogoutButton } from "./_components/LogoutButton";
 import { PageTransition } from "./_components/PageTransition";
 import { AmbientBackground } from "./_components/AmbientBackground";
-import { ChatNotifyButton } from "./_components/ChatNotifyButton";
+import { NotificationBell } from "./_components/NotificationBell";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +29,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
               <div className="topbar-right">
                 <span className="status-pulse"><span className="dot" /> Live</span>
                 <span className="topbar-divider" />
-                <ChatNotifyButton me={me ?? ""} />
+                <NotificationBell me={me ?? ""} />
                 <span className="identity">
                   <span className="avatar">{meName ? meName[0].toUpperCase() : "?"}</span>
                   Ingelogd als <b>{meName}</b>
