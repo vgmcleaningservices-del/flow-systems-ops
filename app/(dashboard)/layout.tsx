@@ -5,6 +5,7 @@ import { NavLinks } from "./_components/NavLinks";
 import { LogoutButton } from "./_components/LogoutButton";
 import { PageTransition } from "./_components/PageTransition";
 import { AmbientBackground } from "./_components/AmbientBackground";
+import { ChatNotifyButton } from "./_components/ChatNotifyButton";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <>
       <AmbientBackground />
       <div className="wrap app-shell">
-        <Sidebar isMatthias={matthias} />
+        <Sidebar isMatthias={matthias} me={me ?? ""} />
         <div className="app-main">
           <div className="topbar">
             <div className="topbar-main">
@@ -28,6 +29,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
               <div className="topbar-right">
                 <span className="status-pulse"><span className="dot" /> Live</span>
                 <span className="topbar-divider" />
+                <ChatNotifyButton me={me ?? ""} />
                 <span className="identity">
                   <span className="avatar">{meName ? meName[0].toUpperCase() : "?"}</span>
                   Ingelogd als <b>{meName}</b>
@@ -35,7 +37,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 <LogoutButton />
               </div>
             </div>
-            <NavLinks isMatthias={matthias} scope="topbar" variant="horizontal" />
+            <NavLinks isMatthias={matthias} me={me ?? ""} scope="topbar" variant="horizontal" />
           </div>
           <PageTransition>{children}</PageTransition>
           <footer>FLOW SYSTEMS B.V. — INTERN GEBRUIK — NIET DELEN BUITEN KERNTEAM</footer>

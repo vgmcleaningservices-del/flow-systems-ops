@@ -12,12 +12,18 @@ export default async function ChatPage() {
   const myChannels = [WARROOM_CHANNEL, ...others.map((p) => dmChannel(me, p.id))];
 
   const db = supabaseAdmin();
-  const { data: messages } = await db
-    .from("chat_messages")
-    .select("*")
-    .in("channel", myChannels)
-    .order("created_at", { ascending: true })
-    .limit(500);
+  const [{ data: messages }, { data: reads }, { data: crew }, { data: ventures }] = await Promise.all([
+    db.from("chat_messages").select("*").in("channel", myChannels).order("created_at", { ascending: true }).limit(500),
+    db.from("chat_reads").select("*").eq("person", me),
+    db.from("crew").select("*").order("rank", { ascending: true }),
+    db.from("ventures").select("*"),
+  ]);
 
-  return <ChatClient me={me} others={others} initialMessages={messages ?? []} />;
+  return (
+    <ChatClient
+      me={me} others={others}
+      initialMessages={messages ?? []} initialReads={reads ?? []}
+      crew={crew ?? []} ventures={ventures ?? []}
+    />
+  );
 }

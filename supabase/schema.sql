@@ -176,13 +176,30 @@ create table if not exists mrr_snapshots (
 
 -- Interne teamchat -- War Room (channel = 'warroom') en 1-op-1 chats (channel
 -- = de twee persoon-id's, alfabetisch gesorteerd, gescheiden door '__').
+-- media_url/media_type: optionele foto/video-bijlage (Storage-bucket
+-- 'chat-uploads'), content is dan leeg.
 create table if not exists chat_messages (
   id bigint generated always as identity primary key,
   channel text not null,
   sender text not null,
   content text not null,
+  media_url text,
+  media_type text, -- 'image' | 'video'
   created_at timestamptz not null default now()
 );
+
+-- Gelezen-status per persoon per kanaal -- voor ongelezen-badges en om te
+-- weten of een binnenkomend bericht een melding moet triggeren.
+create table if not exists chat_reads (
+  person text not null,
+  channel text not null,
+  last_read_at timestamptz not null default now(),
+  primary key (person, channel)
+);
+
+-- Publieke Storage-bucket voor chat-bijlagen (foto/video). Uploads lopen via
+-- de server met de service-role key, dus geen aparte schrijfpolicy nodig.
+insert into storage.buckets (id, name, public) values ('chat-uploads', 'chat-uploads', true) on conflict (id) do nothing;
 
 -- seed data — edit freely afterwards from the dashboard or the Supabase table editor.
 -- Order matters: crew and ventures reference each other (pitched_by / current_venture_id),
@@ -218,6 +235,7 @@ alter table tools enable row level security;
 alter table wiki_pages enable row level security;
 alter table commit_summaries enable row level security;
 alter table chat_messages enable row level security;
+alter table chat_reads enable row level security;
 
 create policy "public read crew" on crew for select using (true);
 create policy "public read ventures" on ventures for select using (true);
@@ -231,6 +249,7 @@ create policy "public read tools" on tools for select using (true);
 create policy "public read wiki_pages" on wiki_pages for select using (true);
 create policy "public read commit_summaries" on commit_summaries for select using (true);
 create policy "public read chat_messages" on chat_messages for select using (true);
+create policy "public read chat_reads" on chat_reads for select using (true);
 
 -- Realtime: let the dashboard subscribe to live changes instead of polling.
 alter publication supabase_realtime add table crew;
@@ -244,3 +263,4 @@ alter publication supabase_realtime add table wiki_pages;
 alter publication supabase_realtime add table tasks;
 alter publication supabase_realtime add table commit_summaries;
 alter publication supabase_realtime add table chat_messages;
+alter publication supabase_realtime add table chat_reads;

@@ -1,8 +1,12 @@
 "use client";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutGroup } from "motion/react";
 import * as motion from "motion/react-client";
+import { supabaseBrowser } from "@/lib/supabaseClient";
+import { ALL_PEOPLE } from "@/lib/people";
+import { WARROOM_CHANNEL, dmChannel } from "@/lib/chat";
 
 const NAV_ITEMS = [
   { href: "/", label: "Overzicht" },
@@ -25,10 +29,39 @@ const ADMIN_NAV_ITEMS = [
 // (alleen CSS-verborgen onder 880px) terwijl TopNav's instantie daaronder
 // juist wél zichtbaar is; zonder namespacing zouden beide dezelfde
 // layoutId delen zodra ze tegelijk in de DOM staan.
-export function NavLinks({ isMatthias, onNavigate, scope, variant = "vertical" }: {
-  isMatthias: boolean; onNavigate?: () => void; scope: string; variant?: "vertical" | "horizontal";
+// Totaal aantal ongelezen chatberichten voor deze persoon, over alle
+// kanalen heen (War Room + elke 1-op-1) -- puur voor het badge-cijfer naast
+// "Chat" in de nav, losstaand van wat de Chat-pagina zelf al bijhoudt.
+function useTotalUnread(me: string): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!me) return;
+    const myChannels = [WARROOM_CHANNEL, ...ALL_PEOPLE.filter((p) => p.id !== me).map((p) => dmChannel(me, p.id))];
+    async function refresh() {
+      const [{ data: reads }, { data: messages }] = await Promise.all([
+        supabaseBrowser.from("chat_reads").select("channel, last_read_at").eq("person", me),
+        supabaseBrowser.from("chat_messages").select("channel, sender, created_at").in("channel", myChannels).neq("sender", me),
+      ]);
+      const readMap = Object.fromEntries((reads ?? []).map((r) => [r.channel, r.last_read_at]));
+      const unread = (messages ?? []).filter((m) => !readMap[m.channel] || m.created_at > readMap[m.channel]).length;
+      setCount(unread);
+    }
+    refresh();
+    const channel = supabaseBrowser
+      .channel("flowsys-nav-unread")
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_messages" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_reads" }, refresh)
+      .subscribe();
+    return () => { supabaseBrowser.removeChannel(channel); };
+  }, [me]);
+  return count;
+}
+
+export function NavLinks({ isMatthias, me, onNavigate, scope, variant = "vertical" }: {
+  isMatthias: boolean; me: string; onNavigate?: () => void; scope: string; variant?: "vertical" | "horizontal";
 }) {
   const pathname = usePathname();
+  const unread = useTotalUnread(me);
   const link = (href: string, label: string) => {
     const active = pathname === href;
     return (
@@ -41,6 +74,7 @@ export function NavLinks({ isMatthias, onNavigate, scope, variant = "vertical" }
           />
         )}
         <span className="nav-link-label">{label}</span>
+        {href === "/chat" && unread > 0 && <span className="chat-unread-dot">{unread}</span>}
       </Link>
     );
   };

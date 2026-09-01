@@ -22,7 +22,8 @@ export interface Metric { id: number; crew_id: string; venture_id: string | null
 export interface Payout { id: number; crew_id: string; venture_id: string | null; amount: number; note: string | null; paid_at: string; recorded_by: string; }
 export interface CommitSummary { id: number; venture_id: string | null; summary: string; commit_count: number; created_at: string; }
 export interface MrrSnapshot { id: number; venture_id: string; mrr: number; captured_at: string; }
-export interface ChatMessage { id: number; channel: string; sender: string; content: string; created_at: string; }
+export interface ChatMessage { id: number; channel: string; sender: string; content: string; media_url: string | null; media_type: string | null; created_at: string; }
+export interface ChatRead { person: string; channel: string; last_read_at: string; }
 export type TaskPriority = "low" | "normal" | "high" | "urgent";
 export interface Task {
   id: number; venture_id: string; title: string; description: string; status: TaskStatus;
