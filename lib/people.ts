@@ -9,4 +9,5 @@ export const ALL_PEOPLE: { id: string; name: string }[] = [
   { id: "zende", name: "Zende" },
   { id: "steven", name: "Steven" },
   { id: "jordy", name: "Jordy" },
+  { id: "jorgo", name: "Jorgo" },
 ];
